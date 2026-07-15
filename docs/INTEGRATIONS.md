@@ -46,10 +46,10 @@ DXF解析のPoCとして、次のエンドポイントを提供します。
 |---|---|
 | エンドポイント | `POST /api/v1/dxf/parse` |
 | 要求 | `multipart/form-data` の `file` フィールド。拡張子`.dxf` |
-| 最大サイズ | 既定20MiB。`MAX_DXF_BYTES`で変更 |
+| 最大サイズ | 既定30MiB。`MAX_DXF_BYTES`で変更。Cloud Runのリクエスト上限を超えるファイルは受付不可 |
 | 応答 | `schema_version`、`dxf_version`、`units`、`layers`、`entity_counts`、`entities` |
-| 認証 | Cloud Runの非公開設定で保護。アプリケーションレベルの利用者認証・認可は未実装 |
-| CORS | `DRAWING_SUPPORT_CORS_ORIGIN`で許可するフロントエンドOriginを指定。既定値は`https://clean-techno.com` |
+| 認証 | PoC中はCloud Runを公開。アプリケーションレベルの利用者認証・認可は未実装のため、本番利用不可 |
+| CORS | `DRAWING_SUPPORT_CORS_ORIGINS`でカンマ区切りの許可Originを指定。既定値は`https://clean-techno.com`と`https://www.clean-techno.com` |
 | エラー | `400 file_required`、`415 invalid_extension`、`422 invalid_dxf`、`413 file_too_large` |
 
 `entities`には、現在、LINE、LWPOLYLINE/POLYLINE、CIRCLE、ARC、TEXT/MTEXT、INSERT、DIMENSIONの基本情報を格納します。未知のエンティティも種別とレイヤーは保持します。寸法計算、干渉判定、DXF再出力、AIによる候補判断はこのAPIの責務に含めません。
@@ -77,7 +77,7 @@ Cloud Buildを構成するときは、最低限次を確認します。
 - キャッシュ更新方法
 - ロールバック方法
 
-初期構成では、バックエンドを本リポジトリ単独の Cloud Run サービス `drawing-support` としてデプロイします。フロントエンドは別のCloud BuildトリガーからFTPアップロードします。コンテナやアップロード対象は `/liff3/` 配下に限定し、日報ツール(`/liff/`)や帳票ツール(`/liff2/`)の成果物を取り込みません。Cloud Run は認証方式が確定するまで非公開設定を初期値とします。具体的な準備・デプロイ手順は `docs/DEPLOYMENT.md` に記載します。
+初期構成では、バックエンドを本リポジトリ単独の Cloud Run サービス `drawing-support` としてデプロイします。フロントエンドは別のCloud BuildトリガーからFTPアップロードします。コンテナやアップロード対象は `/liff3/` 配下に限定し、日報ツール(`/liff/`)や帳票ツール(`/liff2/`)の成果物を取り込みません。DXF JSON化のPoCではブラウザから直接APIを呼ぶため公開設定としますが、認証方式確定後にアプリケーション認証を追加し、Cloud Run設定も含めて本番用に見直します。具体的な準備・デプロイ手順は `docs/DEPLOYMENT.md` に記載します。
 
 ## 未決事項
 

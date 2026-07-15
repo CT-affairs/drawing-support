@@ -32,7 +32,9 @@ steps:
       - asia-northeast1
       - --platform
       - managed
-      - --no-allow-unauthenticated
+      # PoCではPlesk上のブラウザから直接APIを呼ぶため公開する。
+      # 本番運用ではアプリケーション認証を実装してから設定を見直す。
+      - --allow-unauthenticated
       - --port
       - '8080'
       - --quiet

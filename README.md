@@ -20,6 +20,8 @@
 
 Cloud Run のバックエンドは `cloudbuild.yaml` で既存GCPプロジェクト内の Artifact Registry と Cloud Run サービスへデプロイします。現時点では、Tfasから出力したDXFを `POST /api/v1/dxf/parse` で受け取り、図形・レイヤー・単位などを構造化JSONへ変換します。フロントエンドは `cloudbuild-frontend.yaml` の別トリガーでFTPアップロードします。
 
+DXF JSON化の検証中は、Plesk上のブラウザからCloud Runへ直接接続するため、Cloud Runを公開設定にしています。利用者認証・認可が未実装の検証用設定であり、本番運用前にLIFF等の認証検証をAPIへ追加し、公開設定を見直してください。
+
 ローカルでは次のコマンドでAPIを起動できます。
 
 ```powershell

@@ -65,6 +65,7 @@
 </script>
 <script>
 (() => {
+  const MAX_DXF_BYTES = 30 * 1024 * 1024;
   const fileInput = document.getElementById('dxf-file');
   const dropZone = document.getElementById('drop-zone');
   const fileName = document.getElementById('file-name');
@@ -78,6 +79,12 @@
       selectedFile = null;
       parseButton.disabled = true;
       fileName.textContent = 'DXFファイルを選択してください';
+      return;
+    }
+    if (file.size > MAX_DXF_BYTES) {
+      selectedFile = null;
+      parseButton.disabled = true;
+      fileName.textContent = `ファイルが大きすぎます（上限30MiB）`;
       return;
     }
     selectedFile = file;
@@ -119,7 +126,7 @@
       resultCard.hidden = false;
       statusMessage.textContent = '解析が完了しました';
     } catch (error) {
-      statusMessage.textContent = error.message || '通信に失敗しました';
+      statusMessage.textContent = error.message || '通信に失敗しました。CORSまたはCloud Runの認証設定を確認してください。';
       statusMessage.className = 'status-message error';
     } finally {
       parseButton.disabled = false;

@@ -37,6 +37,22 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json["error"]["code"], "file_required")
 
+    def test_oversized_request_keeps_cors_header(self):
+        original_limit = app.config["MAX_CONTENT_LENGTH"]
+        app.config["MAX_CONTENT_LENGTH"] = 1
+        try:
+            response = self.client.post(
+                "/api/v1/dxf/parse",
+                data={"file": (io.BytesIO(b"too large"), "drawing.dxf")},
+                content_type="multipart/form-data",
+                headers={"Origin": "https://clean-techno.com"},
+            )
+        finally:
+            app.config["MAX_CONTENT_LENGTH"] = original_limit
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://clean-techno.com")
+
     def test_dxf_endpoint_rejects_non_dxf(self):
         response = self.client.post(
             "/api/v1/dxf/parse",
