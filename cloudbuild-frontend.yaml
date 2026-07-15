@@ -17,10 +17,10 @@ steps:
         rm -rf /var/lib/apt/lists/*
 
         commit="$COMMIT_SHA"
-        if [ -n "$commit" ] && git cat-file -e "$commit^{commit}" >/dev/null 2>&1; then
-          parent="$(git rev-list --parents -n 1 "$commit" | awk '{print $2}')"
-          if [ -n "$parent" ] && git cat-file -e "$parent^{commit}" >/dev/null 2>&1; then
-            git diff --name-only "$parent" "$commit" > changed.txt
+        if [ -n "$$commit" ] && git cat-file -e "$$commit^{commit}" >/dev/null 2>&1; then
+          parent="$$(git rev-list --parents -n 1 "$$commit" | awk '{print $$2}')"
+          if [ -n "$$parent" ] && git cat-file -e "$$parent^{commit}" >/dev/null 2>&1; then
+            git diff --name-only "$$parent" "$$commit" > changed.txt
           else
             git ls-files > changed.txt
           fi
@@ -32,24 +32,24 @@ steps:
         tr -d '\r' < deploy_frontend.txt | grep -vE '^\s*($|#)' > deploy_frontend.normalized.txt
 
         matches_whitelist() {
-          file="$1"
+          file="$$1"
           while IFS= read -r pattern; do
-            [ -n "$pattern" ] || continue
-            case "$file" in
-              $pattern) return 0 ;;
+            [ -n "$$pattern" ] || continue
+            case "$$file" in
+              $$pattern) return 0 ;;
             esac
           done < deploy_frontend.normalized.txt
           return 1
         }
 
         while IFS= read -r file; do
-          [ -f "$file" ] || continue
-          matches_whitelist "$file" || continue
-          dir="$(dirname "$file")"
-          if [ "$dir" != "." ]; then
-            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "set ftp:ssl-allow no; mkdir -p $dir; put $file -o $file; bye"
+          [ -f "$$file" ] || continue
+          matches_whitelist "$$file" || continue
+          dir="$$(dirname "$$file")"
+          if [ "$$dir" != "." ]; then
+            lftp -u "$$FTP_USER","$$FTP_PASS" "$$FTP_HOST" -e "set ftp:ssl-allow no; mkdir -p $$dir; put $$file -o $$file; bye"
           else
-            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "set ftp:ssl-allow no; put $file -o $file; bye"
+            lftp -u "$$FTP_USER","$$FTP_PASS" "$$FTP_HOST" -e "set ftp:ssl-allow no; put $$file -o $$file; bye"
           fi
         done < changed.txt
 
