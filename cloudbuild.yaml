@@ -1,0 +1,45 @@
+# drawing-support: バックエンド（Cloud Run）用。
+# フロントエンドのFTPアップロードは cloudbuild-frontend.yaml の別トリガーで実行する。
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/dailyreport/drawing-support:$SHORT_SHA'
+      - -t
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/dailyreport/drawing-support:latest'
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/dailyreport/drawing-support:$SHORT_SHA'
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/dailyreport/drawing-support:latest'
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - drawing-support
+      - --image
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/dailyreport/drawing-support:$SHORT_SHA'
+      - --region
+      - asia-northeast1
+      - --platform
+      - managed
+      - --no-allow-unauthenticated
+      - --port
+      - '8080'
+      - --quiet
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/dailyreport/drawing-support:$SHORT_SHA'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/dailyreport/drawing-support:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

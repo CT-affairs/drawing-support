@@ -1,0 +1,66 @@
+# drawing-support: フロントエンドFTPアップロード用。
+# バックエンド（Cloud Run）は cloudbuild.yaml の別トリガーで実行する。
+# FTP接続情報はSecret Managerから注入し、置換変数には保存しない。
+steps:
+  - name: debian:bookworm-slim
+    entrypoint: bash
+    secretEnv:
+      - FTP_HOST
+      - FTP_USER
+      - FTP_PASS
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        apt-get update
+        apt-get install -y --no-install-recommends ca-certificates git lftp
+        rm -rf /var/lib/apt/lists/*
+
+        commit="$COMMIT_SHA"
+        if [ -n "$commit" ] && git cat-file -e "$commit^{commit}" >/dev/null 2>&1; then
+          parent="$(git rev-list --parents -n 1 "$commit" | awk '{print $2}')"
+          if [ -n "$parent" ] && git cat-file -e "$parent^{commit}" >/dev/null 2>&1; then
+            git diff --name-only "$parent" "$commit" > changed.txt
+          else
+            git ls-files > changed.txt
+          fi
+        else
+          find . -type f | sed 's|^\./||' > changed.txt
+        fi
+
+        test -f deploy_frontend.txt
+        tr -d '\r' < deploy_frontend.txt | grep -vE '^\s*($|#)' > deploy_frontend.normalized.txt
+
+        matches_whitelist() {
+          file="$1"
+          while IFS= read -r pattern; do
+            [ -n "$pattern" ] || continue
+            case "$file" in
+              $pattern) return 0 ;;
+            esac
+          done < deploy_frontend.normalized.txt
+          return 1
+        }
+
+        while IFS= read -r file; do
+          [ -f "$file" ] || continue
+          matches_whitelist "$file" || continue
+          dir="$(dirname "$file")"
+          if [ "$dir" != "." ]; then
+            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "set ftp:ssl-allow no; mkdir -p $dir; put $file -o $file; bye"
+          else
+            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "set ftp:ssl-allow no; put $file -o $file; bye"
+          fi
+        done < changed.txt
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/CT-ops-platform-ftp-host/versions/latest
+      env: FTP_HOST
+    - versionName: projects/$PROJECT_ID/secrets/CT-ops-platform-ftp-user/versions/latest
+      env: FTP_USER
+    - versionName: projects/$PROJECT_ID/secrets/CT-ops-platform-ftp-pass/versions/latest
+      env: FTP_PASS
+
+options:
+  logging: CLOUD_LOGGING_ONLY

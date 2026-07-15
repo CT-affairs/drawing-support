@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+README.md
+REPOSITORY.md
+AGENTS.md
+docs/
+scripts/
+sources/
