@@ -7,6 +7,17 @@ from dxf_json import DxfParseError, parse_dxf
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_DXF_BYTES", 20 * 1024 * 1024))
+API_CORS_ORIGIN = os.getenv("DRAWING_SUPPORT_CORS_ORIGIN", "https://clean-techno.com")
+
+
+@app.after_request
+def add_api_cors_headers(response):
+    if request.path.startswith("/api/"):
+        response.headers["Access-Control-Allow-Origin"] = API_CORS_ORIGIN
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 @app.get("/")

@@ -49,6 +49,7 @@ DXF解析のPoCとして、次のエンドポイントを提供します。
 | 最大サイズ | 既定20MiB。`MAX_DXF_BYTES`で変更 |
 | 応答 | `schema_version`、`dxf_version`、`units`、`layers`、`entity_counts`、`entities` |
 | 認証 | Cloud Runの非公開設定で保護。アプリケーションレベルの利用者認証・認可は未実装 |
+| CORS | `DRAWING_SUPPORT_CORS_ORIGIN`で許可するフロントエンドOriginを指定。既定値は`https://clean-techno.com` |
 | エラー | `400 file_required`、`415 invalid_extension`、`422 invalid_dxf`、`413 file_too_large` |
 
 `entities`には、現在、LINE、LWPOLYLINE/POLYLINE、CIRCLE、ARC、TEXT/MTEXT、INSERT、DIMENSIONの基本情報を格納します。未知のエンティティも種別とレイヤーは保持します。寸法計算、干渉判定、DXF再出力、AIによる候補判断はこのAPIの責務に含めません。

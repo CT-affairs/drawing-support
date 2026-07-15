@@ -58,6 +58,12 @@
   </div>
 </div>
 <script>
+  // フロントエンドはPlesk、APIはCloud Runのため、相対URLには送信しない。
+  // 別プロジェクト・別サービスの場合はこの値をデプロイ先に合わせて変更する。
+  window.DRAWING_SUPPORT_API_BASE = window.DRAWING_SUPPORT_API_BASE
+    || "https://drawing-support-1088643883290.asia-northeast1.run.app";
+</script>
+<script>
 (() => {
   const fileInput = document.getElementById('dxf-file');
   const dropZone = document.getElementById('drop-zone');
@@ -92,10 +98,18 @@
     resultCard.hidden = true;
     const formData = new FormData();
     formData.append('file', selectedFile);
-    const apiBase = window.DRAWING_SUPPORT_API_BASE || '';
+    const apiBase = (window.DRAWING_SUPPORT_API_BASE || '').replace(/\/$/, '');
     try {
       const response = await fetch(`${apiBase}/api/v1/dxf/parse`, { method: 'POST', body: formData });
-      const body = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const responseText = await response.text();
+      let body;
+      if (contentType.includes('application/json') && responseText) {
+        body = JSON.parse(responseText);
+      } else {
+        const preview = responseText.replace(/\s+/g, ' ').slice(0, 160);
+        throw new Error(`APIがJSONを返しませんでした（HTTP ${response.status}）。${preview}`);
+      }
       if (!response.ok) throw new Error(body.error?.message || 'DXFの解析に失敗しました');
       document.getElementById('dxf-version').textContent = body.dxf_version || '-';
       document.getElementById('layer-count').textContent = (body.layers || []).length;
