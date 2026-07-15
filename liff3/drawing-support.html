@@ -1,14 +1,58 @@
 <!doctype html>
 <html lang="ja">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>製図サポート</title>
-  </head>
-  <body>
-    <main>
-      <h1>製図サポート</h1>
-      <p>初期構成。現状仮実装中です。画面・認証・API仕様の確定後に機能を実装します。</p>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>製図サポート｜ダッシュボード</title>
+  <link rel="stylesheet" href="/liff3/drawing-support.css">
+</head>
+<body>
+<div class="app-shell">
+  <nav class="somu-sidebar" aria-label="総務メニュー">
+    <div class="somu-sidebar-header"><h2>Clean-techno</h2></div>
+    <ul class="somu-nav-links">
+      <li><span class="somu-nav-header">＜製図サポート＞</span></li>
+      <li><a class="somu-nav-item active" href="/liff3/drawing-support.html">製図_ダッシュボード</a></li>
+      <li><a class="somu-nav-item" href="/liff3/dxf-json.html">DXF_JSON化</a></li>
+      <li><span class="somu-nav-header">＜その他リンク＞</span></li>
+      <li><a class="somu-nav-item" href="https://clean-techno.com/liff/admin.html">日報ツール</a></li>
+      <li><a class="somu-nav-item" href="/liff2/purchase-order-dashboard.html">発注ツール</a></li>
+    </ul>
+    <div class="somu-sidebar-footer"><div id="somu-user-info">未ログイン</div></div>
+  </nav>
+  <div class="app-main">
+    <header class="top-bar"><h1>製図サポート</h1></header>
+    <main class="app-body">
+      <div class="page-inner">
+        <section class="card">
+          <p class="eyebrow">DRAWING SUPPORT</p>
+          <h2>製図業務を支援するダッシュボード</h2>
+          <p class="muted">Tfasから出力した図面データを確認・構造化し、将来的なAIによる候補生成やチェックにつなげます。</p>
+        </section>
+        <section class="dashboard-grid" aria-label="製図サポート機能">
+          <article class="card feature-card">
+            <p class="eyebrow">DATA PREPARATION</p>
+            <h2>DXFをJSON化</h2>
+            <p class="muted">DXFのレイヤー、図形種別、文字、寸法などを構造化JSONへ変換します。</p>
+            <a class="btn-primary card-link" href="/liff3/dxf-json.html">DXF JSON化を開く</a>
+          </article>
+          <article class="card feature-card">
+            <p class="eyebrow">COMING SOON</p>
+            <h2>AI解析・候補生成</h2>
+            <p class="muted">構造化した図面情報をもとに、異常箇所の説明や修正候補を確認する機能を予定しています。</p>
+          </article>
+        </section>
+        <section class="card">
+          <h2>現在の構成</h2>
+          <div class="status-grid">
+            <div class="status-item"><span class="muted">入力</span><strong>Tfas → DXF</strong></div>
+            <div class="status-item"><span class="muted">変換</span><strong>DXF → JSON</strong></div>
+            <div class="status-item"><span class="muted">次の段階</span><strong>JSON → AI解析</strong></div>
+          </div>
+        </section>
+      </div>
     </main>
-  </body>
+  </div>
+</div>
+</body>
 </html>

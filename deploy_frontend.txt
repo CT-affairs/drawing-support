@@ -1,4 +1,5 @@
 # フロントエンドをFTPアップロードする対象。
 liff3/*.html
+liff3/*.css
 liff3/js/*
 liff3/css/*

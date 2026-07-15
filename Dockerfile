@@ -1,6 +1,17 @@
-FROM nginx:1.27-alpine
+FROM python:3.12-slim
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY liff3 /usr/share/nginx/html/liff3
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py dxf_json.py ./
+COPY liff3 ./liff3
 
 EXPOSE 8080
+
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--timeout", "120", "app:app"]

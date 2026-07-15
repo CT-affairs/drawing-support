@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>製図サポート｜DXF JSON化</title>
+  <link rel="stylesheet" href="/liff3/drawing-support.css">
+</head>
+<body>
+<div class="app-shell">
+  <nav class="somu-sidebar" aria-label="総務メニュー">
+    <div class="somu-sidebar-header"><h2>Clean-techno</h2></div>
+    <ul class="somu-nav-links">
+      <li><span class="somu-nav-header">＜製図サポート＞</span></li>
+      <li><a class="somu-nav-item" href="/liff3/drawing-support.html">製図_ダッシュボード</a></li>
+      <li><a class="somu-nav-item active" href="/liff3/dxf-json.html">DXF_JSON化</a></li>
+      <li><span class="somu-nav-header">＜その他リンク＞</span></li>
+      <li><a class="somu-nav-item" href="https://clean-techno.com/liff/admin.html">日報ツール</a></li>
+      <li><a class="somu-nav-item" href="/liff2/purchase-order-dashboard.html">発注ツール</a></li>
+    </ul>
+    <div class="somu-sidebar-footer"><div id="somu-user-info">未ログイン</div></div>
+  </nav>
+  <div class="app-main">
+    <header class="top-bar"><h1>DXF JSON化</h1></header>
+    <main class="app-body">
+      <div class="page-inner">
+        <section class="card upload-panel">
+          <div>
+            <p class="eyebrow">DATA PREPARATION</p>
+            <h2>Tfasから出力したDXFを解析</h2>
+            <p class="muted">`.dxf`ファイルを選択すると、レイヤー・図形種別・基本情報をJSONに変換します。TFSファイルそのものには対応していません。</p>
+          </div>
+          <input id="dxf-file" type="file" accept=".dxf,application/dxf" hidden>
+          <label class="drop-zone" id="drop-zone" for="dxf-file">
+            <strong>DXFファイルを選択</strong>
+            <span>クリック、またはここへファイルをドロップ</span>
+          </label>
+          <div class="file-name" id="file-name" aria-live="polite">ファイル未選択</div>
+          <div class="action-row">
+            <button class="btn-primary" id="parse-button" type="button" disabled>JSON化を実行</button>
+            <a class="btn-secondary" href="/liff3/drawing-support.html">ダッシュボードへ戻る</a>
+          </div>
+          <div class="status-message" id="status-message" role="status" aria-live="polite"></div>
+        </section>
+        <section class="card" id="result-card" hidden>
+          <h2>解析結果</h2>
+          <div class="result-summary">
+            <div class="result-value"><span>DXFバージョン</span><strong id="dxf-version">-</strong></div>
+            <div class="result-value"><span>レイヤー数</span><strong id="layer-count">-</strong></div>
+            <div class="result-value"><span>図形数</span><strong id="entity-count">-</strong></div>
+            <div class="result-value"><span>単位コード</span><strong id="unit-code">-</strong></div>
+          </div>
+          <h3>構造化JSON</h3>
+          <pre class="json-output" id="json-output"></pre>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+<script>
+(() => {
+  const fileInput = document.getElementById('dxf-file');
+  const dropZone = document.getElementById('drop-zone');
+  const fileName = document.getElementById('file-name');
+  const parseButton = document.getElementById('parse-button');
+  const statusMessage = document.getElementById('status-message');
+  const resultCard = document.getElementById('result-card');
+  let selectedFile = null;
+  function setFile(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.dxf')) {
+      selectedFile = null;
+      parseButton.disabled = true;
+      fileName.textContent = 'DXFファイルを選択してください';
+      return;
+    }
+    selectedFile = file;
+    fileName.textContent = `${file.name}（${Math.ceil(file.size / 1024)}KB）`;
+    parseButton.disabled = false;
+    statusMessage.textContent = '';
+    statusMessage.className = 'status-message';
+  }
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+  ['dragenter', 'dragover'].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.add('is-dragover'); }));
+  ['dragleave', 'drop'].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.remove('is-dragover'); }));
+  dropZone.addEventListener('drop', event => setFile(event.dataTransfer.files[0]));
+  parseButton.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    parseButton.disabled = true;
+    statusMessage.textContent = '解析中…';
+    statusMessage.className = 'status-message';
+    resultCard.hidden = true;
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    const apiBase = window.DRAWING_SUPPORT_API_BASE || '';
+    try {
+      const response = await fetch(`${apiBase}/api/v1/dxf/parse`, { method: 'POST', body: formData });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || 'DXFの解析に失敗しました');
+      document.getElementById('dxf-version').textContent = body.dxf_version || '-';
+      document.getElementById('layer-count').textContent = (body.layers || []).length;
+      document.getElementById('entity-count').textContent = Object.values(body.entity_counts || {}).reduce((a, b) => a + b, 0);
+      document.getElementById('unit-code').textContent = body.units ?? '未設定';
+      document.getElementById('json-output').textContent = JSON.stringify(body, null, 2);
+      resultCard.hidden = false;
+      statusMessage.textContent = '解析が完了しました';
+    } catch (error) {
+      statusMessage.textContent = error.message || '通信に失敗しました';
+      statusMessage.className = 'status-message error';
+    } finally {
+      parseButton.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

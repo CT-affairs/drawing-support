@@ -8,6 +8,8 @@
 - 項目: `製図サポート`
 - 遷移先: `/liff3/drawing-support.html`
 
+製図サポート内の画面は、ダッシュボードを`/liff3/drawing-support.html`、DXF JSON化機能を`/liff3/dxf-json.html`として分離します。サイドメニューのカテゴリ・配色・active表示は発注画面のメニュー構成を踏襲します。
+
 現在の連携契約はURL遷移のみです。クエリ文字列、POSTデータ、ブラウザストレージによる引き渡しは契約に含みません。
 
 ## 認証・認可
@@ -36,7 +38,24 @@
 
 ## API連携
 
-現時点で、日報ツール・帳票ツールとのAPI連携は未定義です。追加時は以下をこの文書へ記録します。
+### 製図サポート内部API
+
+DXF解析のPoCとして、次のエンドポイントを提供します。
+
+| 項目 | 内容 |
+|---|---|
+| エンドポイント | `POST /api/v1/dxf/parse` |
+| 要求 | `multipart/form-data` の `file` フィールド。拡張子`.dxf` |
+| 最大サイズ | 既定20MiB。`MAX_DXF_BYTES`で変更 |
+| 応答 | `schema_version`、`dxf_version`、`units`、`layers`、`entity_counts`、`entities` |
+| 認証 | Cloud Runの非公開設定で保護。アプリケーションレベルの利用者認証・認可は未実装 |
+| エラー | `400 file_required`、`415 invalid_extension`、`422 invalid_dxf`、`413 file_too_large` |
+
+`entities`には、現在、LINE、LWPOLYLINE/POLYLINE、CIRCLE、ARC、TEXT/MTEXT、INSERT、DIMENSIONの基本情報を格納します。未知のエンティティも種別とレイヤーは保持します。寸法計算、干渉判定、DXF再出力、AIによる候補判断はこのAPIの責務に含めません。
+
+このAPIはTFS（Tfas固有形式）を直接読みません。TfasからDXFまたはIFCへ変換した後のDXFを対象にします。将来AI APIを追加する場合は、このJSONを入力にして候補生成・異常箇所の説明・修正案を行い、座標・寸法の確定はプログラム側で検証します。
+
+日報ツール・帳票ツールとのAPI連携は引き続き未定義です。追加時は以下をこの文書へ記録します。
 
 - 所有ツールとエンドポイント
 - HTTPメソッド、要求・応答スキーマ

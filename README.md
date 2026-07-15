@@ -5,6 +5,7 @@
 ## 公開URL
 
 - 画面: `/liff3/drawing-support.html`
+- DXF JSON化: `/liff3/dxf-json.html`
 - 日報ツールの管理メニュー「その他リンク」→「製図サポート」から遷移します。
 
 ホスト名、APIのベースURL、GCPプロジェクトなど環境依存の値は、実装確定後に環境変数またはデプロイ設定へ置きます。秘密値をこのREADMEへ記載しないでください。
@@ -17,7 +18,17 @@
 
 ## 現在の状態
 
-Cloud Run の初期構成を用意しています。バックエンドは `cloudbuild.yaml` で既存GCPプロジェクト内の Artifact Registry と Cloud Run サービスへデプロイし、フロントエンドは `cloudbuild-frontend.yaml` の別トリガーでFTPアップロードします。認証方式、API、保存先などの業務仕様は未確定のため、まだ実装していません。
+Cloud Run のバックエンドは `cloudbuild.yaml` で既存GCPプロジェクト内の Artifact Registry と Cloud Run サービスへデプロイします。現時点では、Tfasから出力したDXFを `POST /api/v1/dxf/parse` で受け取り、図形・レイヤー・単位などを構造化JSONへ変換します。フロントエンドは `cloudbuild-frontend.yaml` の別トリガーでFTPアップロードします。
+
+ローカルでは次のコマンドでAPIを起動できます。
+
+```powershell
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
+python app.py
+```
+
+DXF解析APIの仕様と制約は `docs/INTEGRATIONS.md` に記載しています。TFSを直接解析するものではなく、Tfas側でDXFへ変換したファイルを対象とします。
 
 デプロイ手順と必要なGCP権限は `docs/DEPLOYMENT.md` を参照してください。
 
