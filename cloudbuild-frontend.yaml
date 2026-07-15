@@ -45,11 +45,12 @@ steps:
         while IFS= read -r file; do
           [ -f "$$file" ] || continue
           matches_whitelist "$$file" || continue
-          dir="$$(dirname "$$file")"
-          if [ "$$dir" != "." ]; then
-            lftp -u "$$FTP_USER","$$FTP_PASS" "$$FTP_HOST" -e "set ftp:ssl-allow no; mkdir -p $$dir; put $$file -o $$file; bye"
+          remote_file="$${file#liff3/}"
+          remote_dir="$$(dirname "$$remote_file")"
+          if [ "$$remote_dir" != "." ]; then
+            lftp -u "$$FTP_USER","$$FTP_PASS" "$$FTP_HOST" -e "set ftp:ssl-allow no; mkdir -p $$remote_dir; put $$file -o $$remote_file; bye"
           else
-            lftp -u "$$FTP_USER","$$FTP_PASS" "$$FTP_HOST" -e "set ftp:ssl-allow no; put $$file -o $$file; bye"
+            lftp -u "$$FTP_USER","$$FTP_PASS" "$$FTP_HOST" -e "set ftp:ssl-allow no; put $$file -o $$remote_file; bye"
           fi
         done < changed.txt
 
