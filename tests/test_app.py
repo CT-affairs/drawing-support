@@ -27,6 +27,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(dxf_page.status_code, 200)
         self.assertIn("DXF_JSON化", dxf_page.text)
         self.assertIn("/api/v1/dxf/parse", dxf_page.text)
+        self.assertIn("JSONをダウンロード", dxf_page.text)
         self.assertEqual(stylesheet.status_code, 200)
         dashboard.close()
         dxf_page.close()

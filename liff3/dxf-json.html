@@ -38,6 +38,7 @@
           <div class="file-name" id="file-name" aria-live="polite">ファイル未選択</div>
           <div class="action-row">
             <button class="btn-primary" id="parse-button" type="button" disabled>JSON化を実行</button>
+            <button class="btn-secondary" id="download-json-button" type="button" disabled>JSONをダウンロード</button>
             <a class="btn-secondary" href="/liff3/drawing-support.html">ダッシュボードへ戻る</a>
           </div>
           <div class="status-message" id="status-message" role="status" aria-live="polite"></div>
@@ -70,9 +71,11 @@
   const dropZone = document.getElementById('drop-zone');
   const fileName = document.getElementById('file-name');
   const parseButton = document.getElementById('parse-button');
+  const downloadJsonButton = document.getElementById('download-json-button');
   const statusMessage = document.getElementById('status-message');
   const resultCard = document.getElementById('result-card');
   let selectedFile = null;
+  let parsedJson = null;
   function setFile(file) {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.dxf')) {
@@ -88,6 +91,8 @@
       return;
     }
     selectedFile = file;
+    parsedJson = null;
+    downloadJsonButton.disabled = true;
     fileName.textContent = `${file.name}（${Math.ceil(file.size / 1024)}KB）`;
     parseButton.disabled = false;
     statusMessage.textContent = '';
@@ -100,9 +105,12 @@
   parseButton.addEventListener('click', async () => {
     if (!selectedFile) return;
     parseButton.disabled = true;
+    downloadJsonButton.disabled = true;
     statusMessage.textContent = '解析中…';
     statusMessage.className = 'status-message';
     resultCard.hidden = true;
+    parsedJson = null;
+    downloadJsonButton.disabled = true;
     const formData = new FormData();
     formData.append('file', selectedFile);
     const apiBase = (window.DRAWING_SUPPORT_API_BASE || '').replace(/\/$/, '');
@@ -123,6 +131,8 @@
       document.getElementById('entity-count').textContent = Object.values(body.entity_counts || {}).reduce((a, b) => a + b, 0);
       document.getElementById('unit-code').textContent = body.units ?? '未設定';
       document.getElementById('json-output').textContent = JSON.stringify(body, null, 2);
+      parsedJson = body;
+      downloadJsonButton.disabled = false;
       resultCard.hidden = false;
       statusMessage.textContent = '解析が完了しました';
     } catch (error) {
@@ -131,6 +141,21 @@
     } finally {
       parseButton.disabled = false;
     }
+  });
+
+  downloadJsonButton.addEventListener('click', () => {
+    if (!parsedJson || !selectedFile) return;
+    const json = JSON.stringify(parsedJson, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const baseName = selectedFile.name.replace(/\.dxf$/i, '') || 'dxf-analysis';
+    anchor.href = objectUrl;
+    anchor.download = `${baseName}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
   });
 })();
 </script>
