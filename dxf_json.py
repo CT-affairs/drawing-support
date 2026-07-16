@@ -4,7 +4,6 @@ import io
 import math
 from collections import Counter
 from typing import BinaryIO, Any
-
 import ezdxf
 from ezdxf.entities import DXFEntity
 
