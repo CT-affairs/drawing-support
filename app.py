@@ -1,7 +1,6 @@
 import os
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
-
 from dxf_json import DxfParseError, parse_dxf
 
 
