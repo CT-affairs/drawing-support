@@ -31,6 +31,7 @@ ezdxfでDXFを読み込み
 - レイアウト別のエンティティ件数、ブロック別の件数、INSERTとブロック名の取得
 - DXFセクション、生レコード件数、ezdxf内部件数、監査件数などの診断情報
 - 通常読み込みで図形が取得できない場合の`recover.read()`フォールバック
+- 文字コード候補診断と選択結果の記録
 
 ## 実際に確認できたこと
 
@@ -75,10 +76,11 @@ ezdxfでDXFを読み込み
 
 1. レスポンスの`spaces`、`blocks`、`inserts`で実DXFの格納場所を確認する
 2. `diagnostics.entities_section`の生レコード件数と種別を確認する
-3. `diagnostics.loader`が`recover`になった場合の監査結果を確認する
-4. Tfasから出力するDXF設定（2D/3D、R12互換、ブロック化）を確認する
-5. LINE、POLYLINE、TEXT、DIMENSION、INSERT等がどこに格納されているか確認する
-6. 図形取得後に、AIへ渡す中間JSONの項目を整理する
+3. `diagnostics.encoding`の`dwg_codepage`、候補、選択確度を確認する
+4. `diagnostics.loader`が`recover`になった場合の監査結果を確認する
+5. Tfasから出力するDXF設定（2D/3D、R12互換、ブロック化）を確認する
+6. LINE、POLYLINE、TEXT、DIMENSION、INSERT等がどこに格納されているか確認する
+7. 図形取得後に、AIへ渡す中間JSONの項目を整理する
 
 ## セキュリティ・運用上の注意
 

@@ -3,7 +3,7 @@ import unittest
 
 import ezdxf
 
-from dxf_json import DxfParseError, parse_dxf
+from dxf_json import DxfParseError, _encoding_diagnostics, parse_dxf
 
 
 class DxfJsonTests(unittest.TestCase):
@@ -36,7 +36,9 @@ class DxfJsonTests(unittest.TestCase):
         self.assertEqual(result["inserts"][0]["block"], "DUCT_BLOCK")
         self.assertEqual(result["inserts"][0]["space"], "Model")
         self.assertGreater(result["diagnostics"]["file_size_bytes"], 0)
-        self.assertEqual(result["diagnostics"]["text_encoding"], "utf-8")
+        self.assertEqual(result["diagnostics"]["text_encoding"], "cp1252")
+        self.assertEqual(result["diagnostics"]["encoding"]["selected_encoding"], "cp1252")
+        self.assertGreaterEqual(len(result["diagnostics"]["encoding"]["candidates"]), 2)
         self.assertEqual(result["diagnostics"]["entities_section"]["record_count"], 4)
         self.assertEqual(result["diagnostics"]["ezdxf_entity_database_count"] > 0, True)
         self.assertEqual(result["diagnostics"]["audit"], {"error_count": 0, "fix_count": 0})
@@ -46,6 +48,19 @@ class DxfJsonTests(unittest.TestCase):
     def test_invalid_file_is_rejected(self):
         with self.assertRaises(DxfParseError):
             parse_dxf(b"not a dxf")
+
+    def test_encoding_diagnostics_honor_dwg_codepage(self):
+        raw = (
+            "0\nSECTION\n2\nHEADER\n"
+            "9\n$DWGCODEPAGE\n3\nANSI_932\n"
+            "0\nENDSEC\n0\nEOF\n"
+        ).encode("cp932")
+
+        encoding, _text, diagnostics = _encoding_diagnostics(raw)
+
+        self.assertEqual(encoding, "cp932")
+        self.assertEqual(diagnostics["dwg_codepage"], "ANSI_932")
+        self.assertEqual(diagnostics["codepage_encoding"], "cp932")
 
 
 if __name__ == "__main__":

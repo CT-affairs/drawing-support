@@ -83,6 +83,116 @@ def _insert_json(entity: DXFEntity, space: str) -> dict[str, Any]:
     }
 
 
+def _header_value(text: str, variable: str) -> str | None:
+    lines = text.splitlines()
+    for index in range(len(lines) - 3):
+        if (
+            lines[index].strip() == "9"
+            and lines[index + 1].strip() == variable
+            and lines[index + 2].strip() in {"1", "2", "3", "70"}
+        ):
+            return lines[index + 3].strip()
+    return None
+
+
+def _encoding_diagnostics(raw_bytes: bytes, preferred_encoding: str | None = None) -> tuple[str, str, dict[str, Any]]:
+    candidates = [preferred_encoding] if preferred_encoding else []
+    candidates.extend(["utf-8-sig", "cp932", "cp1252"])
+    candidates = list(dict.fromkeys(candidates))
+
+    decoded = {}
+    candidate_results = []
+    for encoding in candidates:
+        try:
+            text = raw_bytes.decode(encoding, errors="strict")
+            decoded[encoding] = text
+            japanese_count = sum(
+                1
+                for char in text
+                if "\u3040" <= char <= "\u30ff" or "\u4e00" <= char <= "\u9fff"
+            )
+            control_count = sum(
+                1
+                for char in text
+                if ord(char) < 32 and char not in {"\r", "\n", "\t"}
+            )
+            confidence = 0.55
+            if encoding in {"cp932", "utf-8", "utf-8-sig"}:
+                confidence += 0.1
+            if japanese_count:
+                confidence += 0.2
+            if control_count:
+                confidence -= min(0.2, control_count / max(1, len(text)))
+            candidate_results.append(
+                {
+                    "encoding": encoding,
+                    "valid": True,
+                    "replacement_count": text.count("\ufffd"),
+                    "surrogate_count": sum(0xD800 <= ord(char) <= 0xDFFF for char in text),
+                    "unicode_escape_count": text.count("\\U+"),
+                    "japanese_char_count": japanese_count,
+                    "confidence": round(max(0.0, min(1.0, confidence)), 2),
+                }
+            )
+        except UnicodeDecodeError as exc:
+            candidate_results.append(
+                {
+                    "encoding": encoding,
+                    "valid": False,
+                    "error": str(exc),
+                    "confidence": 0.0,
+                }
+            )
+
+    codepage = None
+    for text in decoded.values():
+        codepage = _header_value(text, "$DWGCODEPAGE")
+        if codepage:
+            break
+    codepage_map = {
+        "ANSI_932": "cp932",
+        "ANSI_1252": "cp1252",
+        "ANSI_1250": "cp1250",
+        "ANSI_1251": "cp1251",
+        "ANSI_1254": "cp1254",
+    }
+    codepage_encoding = codepage_map.get((codepage or "").upper())
+    valid_candidates = [item for item in candidate_results if item["valid"]]
+    selected = next(
+        (item for item in valid_candidates if item["encoding"] == codepage_encoding),
+        None,
+    )
+    if selected is None and preferred_encoding:
+        selected = next(
+            (item for item in valid_candidates if item["encoding"] == preferred_encoding),
+            None,
+        )
+    if selected is None:
+        selected = next(
+            (item for item in valid_candidates if item["encoding"] in {"utf-8", "utf-8-sig"}),
+            None,
+        )
+    if selected is None:
+        selected = next(
+            (item for item in valid_candidates if item["encoding"] == "cp932"),
+            None,
+        )
+    if selected is None:
+        selected = max(valid_candidates, key=lambda item: item["confidence"], default=None)
+    if selected is None:
+        raise UnicodeDecodeError("unknown", raw_bytes, 0, len(raw_bytes), "no supported encoding candidate")
+
+    selected_encoding = selected["encoding"]
+    selected_text = decoded[selected_encoding]
+    return selected_encoding, selected_text, {
+        "dwg_codepage": codepage,
+        "codepage_encoding": codepage_encoding,
+        "selected_encoding": selected_encoding,
+        "selected_confidence": selected["confidence"],
+        "candidates": candidate_results,
+    }
+
+
 def _raw_dxf_diagnostics(text: str, source_size: int, encoding: str) -> dict[str, Any]:
     """Collect lightweight diagnostics without expanding every DXF entity."""
     lines = text.splitlines()
@@ -160,21 +270,14 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         raw = source if isinstance(source, bytes) else source.read()
         raw_bytes = raw if isinstance(raw, bytes) else raw.encode("utf-8")
         source_size = len(raw_bytes)
-        encoding = "text-stream"
-        if isinstance(raw, bytes):
-            try:
-                text = raw.decode("utf-8-sig")
-                encoding = "utf-8"
-            except UnicodeDecodeError:
-                text = raw.decode("cp932")
-                encoding = "cp932"
-        else:
-            text = raw
+        preferred_encoding = None if isinstance(raw, bytes) else "utf-8"
+        encoding, text, encoding_diagnostics = _encoding_diagnostics(raw_bytes, preferred_encoding)
         document = ezdxf.read(io.StringIO(text))
     except (OSError, IOError, ezdxf.DXFError, UnicodeError) as exc:
         raise DxfParseError("DXF could not be read") from exc
 
     diagnostics = _raw_dxf_diagnostics(text, source_size, encoding)
+    diagnostics["encoding"] = encoding_diagnostics
     loader = "standard"
     recover_info: dict[str, Any] = {"attempted": False}
     audit = None
