@@ -5,6 +5,7 @@ import math
 from collections import Counter
 from typing import BinaryIO, Any
 import ezdxf
+from ezdxf import recover
 from ezdxf.entities import DXFEntity
 
 
@@ -135,10 +136,30 @@ def _raw_dxf_diagnostics(text: str, source_size: int, encoding: str) -> dict[str
     }
 
 
+def _document_geometry_count(document: Any) -> int:
+    layout_count = sum(sum(1 for _ in layout) for layout in document.layouts)
+    block_count = sum(
+        sum(1 for _ in block)
+        for block in document.blocks
+        if block.name not in {"*Model_Space", "*Paper_Space"}
+    )
+    return layout_count + block_count
+
+
+def _needs_recover(document: Any, diagnostics: dict[str, Any]) -> bool:
+    if _document_geometry_count(document) > 0:
+        return False
+    return any(
+        section["name"] in {"ENTITIES", "BLOCKS"} and section["record_count"] > 0
+        for section in diagnostics["sections"]
+    )
+
+
 def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
     try:
         raw = source if isinstance(source, bytes) else source.read()
-        source_size = len(raw) if isinstance(raw, bytes) else len(raw.encode("utf-8"))
+        raw_bytes = raw if isinstance(raw, bytes) else raw.encode("utf-8")
+        source_size = len(raw_bytes)
         encoding = "text-stream"
         if isinstance(raw, bytes):
             try:
@@ -152,6 +173,18 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         document = ezdxf.read(io.StringIO(text))
     except (OSError, IOError, ezdxf.DXFError, UnicodeError) as exc:
         raise DxfParseError("DXF could not be read") from exc
+
+    diagnostics = _raw_dxf_diagnostics(text, source_size, encoding)
+    loader = "standard"
+    recover_info: dict[str, Any] = {"attempted": False}
+    audit = None
+    if _needs_recover(document, diagnostics):
+        recover_info["attempted"] = True
+        try:
+            document, audit = recover.read(io.BytesIO(raw_bytes))
+            loader = "recover"
+        except (OSError, IOError, ezdxf.DXFError, UnicodeError) as exc:
+            recover_info["error"] = str(exc)
 
     space_summaries = []
     layout_entities: dict[str, list[DXFEntity]] = {}
@@ -196,10 +229,12 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         )
     blocks.sort(key=lambda item: item["name"])
 
-    audit = document.audit()
-    diagnostics = _raw_dxf_diagnostics(text, source_size, encoding)
+    if audit is None:
+        audit = document.audit()
     diagnostics.update(
         {
+            "loader": loader,
+            "recover": recover_info,
             "ezdxf_entity_database_count": len(document.entitydb),
             "layout_count": len(space_summaries),
             "layer_table_count": len(document.layers),

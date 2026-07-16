@@ -40,6 +40,8 @@ class DxfJsonTests(unittest.TestCase):
         self.assertEqual(result["diagnostics"]["entities_section"]["record_count"], 4)
         self.assertEqual(result["diagnostics"]["ezdxf_entity_database_count"] > 0, True)
         self.assertEqual(result["diagnostics"]["audit"], {"error_count": 0, "fix_count": 0})
+        self.assertEqual(result["diagnostics"]["loader"], "standard")
+        self.assertFalse(result["diagnostics"]["recover"]["attempted"])
 
     def test_invalid_file_is_rejected(self):
         with self.assertRaises(DxfParseError):
