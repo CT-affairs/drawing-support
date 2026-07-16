@@ -32,6 +32,8 @@ python app.py
 
 DXF解析APIの仕様と制約は `docs/INTEGRATIONS.md` に記載しています。TFSを直接解析するものではなく、Tfas側でDXFへ変換したファイルを対象とします。
 
+PoCの到達点と次回作業は `docs/AI_SUPPORT_PROGRESS.md` に記録しています。
+
 デプロイ手順と必要なGCP権限は `docs/DEPLOYMENT.md` を参照してください。
 
 ## 秘密情報

@@ -63,6 +63,26 @@ def _entity_json(entity: DXFEntity) -> dict[str, Any]:
     return item
 
 
+def _entity_counts(entities: list[DXFEntity]) -> dict[str, int]:
+    return dict(sorted(Counter(entity.dxftype() for entity in entities).items()))
+
+
+def _insert_json(entity: DXFEntity, space: str) -> dict[str, Any]:
+    dxf = entity.dxf
+    return {
+        "space": space,
+        "block": dxf.name,
+        "layer": dxf.get("layer", "0"),
+        "insert": _point(dxf.insert),
+        "rotation": _number(dxf.get("rotation", 0)),
+        "scale": [
+            _number(dxf.get("xscale", 1)),
+            _number(dxf.get("yscale", 1)),
+            _number(dxf.get("zscale", 1)),
+        ],
+    }
+
+
 def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
     try:
         raw = source if isinstance(source, bytes) else source.read()
@@ -77,9 +97,48 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
     except (OSError, IOError, ezdxf.DXFError, UnicodeError) as exc:
         raise DxfParseError("DXF could not be read") from exc
 
-    entities = [_entity_json(entity) for entity in document.modelspace()]
+    space_summaries = []
+    layout_entities: dict[str, list[DXFEntity]] = {}
+    inserts = []
+    for layout in document.layouts:
+        layout_entities[layout.name] = list(layout)
+        entities_in_layout = layout_entities[layout.name]
+        for entity in entities_in_layout:
+            if entity.dxftype() == "INSERT":
+                inserts.append(_insert_json(entity, layout.name))
+        space_summaries.append(
+            {
+                "name": layout.name,
+                "kind": "model" if layout.name == "Model" else "paper",
+                "entity_count": len(entities_in_layout),
+                "entity_counts": _entity_counts(entities_in_layout),
+            }
+        )
+
+    modelspace_entities = layout_entities.get("Model", [])
+    entities = [_entity_json(entity) for entity in modelspace_entities]
     counts = Counter(item["type"] for item in entities)
-    layers = sorted({item["layer"] for item in entities})
+    layers = sorted(
+        {
+            entity.dxf.get("layer", "0")
+            for entities_in_layout in layout_entities.values()
+            for entity in entities_in_layout
+        }
+    )
+
+    blocks = []
+    for block in document.blocks:
+        if block.name in {"*Model_Space", "*Paper_Space"}:
+            continue
+        block_entities = list(block)
+        blocks.append(
+            {
+                "name": block.name,
+                "entity_count": len(block_entities),
+                "entity_counts": _entity_counts(block_entities),
+            }
+        )
+    blocks.sort(key=lambda item: item["name"])
 
     return {
         "schema_version": "1.0",
@@ -88,4 +147,7 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         "layers": layers,
         "entity_counts": dict(sorted(counts.items())),
         "entities": entities,
+        "spaces": space_summaries,
+        "blocks": blocks,
+        "inserts": inserts,
     }
