@@ -49,12 +49,12 @@ DXF解析のPoCとして、次のエンドポイントを提供します。
 | エンドポイント | `POST /api/v1/dxf/parse` |
 | 要求 | `multipart/form-data` の `file` フィールド。拡張子`.dxf` |
 | 最大サイズ | 既定30MiB。`MAX_DXF_BYTES`で変更。Cloud Runのリクエスト上限を超えるファイルは受付不可 |
-| 応答 | `schema_version`、`dxf_version`、`units`、`layers`、`entity_counts`、`entities`、`spaces`、`blocks`、`inserts` |
+| 応答 | `schema_version`、`dxf_version`、`units`、`layers`、`entity_counts`、`entities`、`spaces`、`blocks`、`inserts`、`diagnostics` |
 | 認証 | PoC中はCloud Runを公開。アプリケーションレベルの利用者認証・認可は未実装のため、本番利用不可 |
 | CORS | `DRAWING_SUPPORT_CORS_ORIGINS`でカンマ区切りの許可Originを指定。既定値は`https://clean-techno.com`と`https://www.clean-techno.com` |
 | エラー | `400 file_required`、`415 invalid_extension`、`422 invalid_dxf`、`413 file_too_large` |
 
-`entities`には、現在、Model SpaceにあるLINE、LWPOLYLINE/POLYLINE、CIRCLE、ARC、TEXT/MTEXT、INSERT、DIMENSIONの基本情報を格納します。`spaces`にはレイアウト別のエンティティ件数、`blocks`にはブロック定義別の件数、`inserts`には配置先レイアウト・ブロック名・配置座標・縮尺を格納します。未知のエンティティも種別とレイヤーは保持します。寸法計算、干渉判定、DXF再出力、AIによる候補判断はこのAPIの責務に含めません。
+`entities`には、現在、Model SpaceにあるLINE、LWPOLYLINE/POLYLINE、CIRCLE、ARC、TEXT/MTEXT、INSERT、DIMENSIONの基本情報を格納します。`spaces`にはレイアウト別のエンティティ件数、`blocks`にはブロック定義別の件数、`inserts`には配置先レイアウト・ブロック名・配置座標・縮尺を格納します。`diagnostics`にはファイルサイズ、文字コード、DXFセクション別の生レコード件数、ezdxf内部エンティティ数、監査件数を格納します。未知のエンティティも種別とレイヤーは保持します。寸法計算、干渉判定、DXF再出力、AIによる候補判断はこのAPIの責務に含めません。
 
 このAPIはTFS（Tfas固有形式）を直接読みません。TfasからDXFまたはIFCへ変換した後のDXFを対象にします。将来AI APIを追加する場合は、このJSONを入力にして候補生成・異常箇所の説明・修正案を行い、座標・寸法の確定はプログラム側で検証します。
 

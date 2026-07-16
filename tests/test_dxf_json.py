@@ -35,6 +35,11 @@ class DxfJsonTests(unittest.TestCase):
         self.assertEqual(result["blocks"], [{"name": "DUCT_BLOCK", "entity_count": 1, "entity_counts": {"LINE": 1}}])
         self.assertEqual(result["inserts"][0]["block"], "DUCT_BLOCK")
         self.assertEqual(result["inserts"][0]["space"], "Model")
+        self.assertGreater(result["diagnostics"]["file_size_bytes"], 0)
+        self.assertEqual(result["diagnostics"]["text_encoding"], "utf-8")
+        self.assertEqual(result["diagnostics"]["entities_section"]["record_count"], 4)
+        self.assertEqual(result["diagnostics"]["ezdxf_entity_database_count"] > 0, True)
+        self.assertEqual(result["diagnostics"]["audit"], {"error_count": 0, "fix_count": 0})
 
     def test_invalid_file_is_rejected(self):
         with self.assertRaises(DxfParseError):

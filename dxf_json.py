@@ -82,14 +82,71 @@ def _insert_json(entity: DXFEntity, space: str) -> dict[str, Any]:
     }
 
 
+def _raw_dxf_diagnostics(text: str, source_size: int, encoding: str) -> dict[str, Any]:
+    """Collect lightweight diagnostics without expanding every DXF entity."""
+    lines = text.splitlines()
+    sections = []
+    current = None
+
+    for index, line in enumerate(lines):
+        value = line.strip()
+        next_value = lines[index + 1].strip() if index + 1 < len(lines) else None
+
+        if value == "0" and next_value == "SECTION" and index + 3 < len(lines):
+            if lines[index + 2].strip() == "2":
+                current = {
+                    "name": lines[index + 3].strip(),
+                    "line_count": 0,
+                    "record_counts": Counter(),
+                }
+                sections.append(current)
+                continue
+
+        if current is None:
+            continue
+
+        current["line_count"] += 1
+        if value == "0" and next_value not in {None, "SECTION", "ENDSEC", "EOF"}:
+            current["record_counts"][next_value] += 1
+        if value == "0" and next_value == "ENDSEC":
+            current = None
+
+    normalized_sections = []
+    for section in sections:
+        record_counts = dict(sorted(section["record_counts"].items()))
+        normalized_sections.append(
+            {
+                "name": section["name"],
+                "line_count": section["line_count"],
+                "record_counts": record_counts,
+                "record_count": sum(record_counts.values()),
+            }
+        )
+
+    entities_section = next(
+        (section for section in normalized_sections if section["name"] == "ENTITIES"),
+        None,
+    )
+    return {
+        "file_size_bytes": source_size,
+        "text_encoding": encoding,
+        "sections": normalized_sections,
+        "entities_section": entities_section,
+    }
+
+
 def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
     try:
         raw = source if isinstance(source, bytes) else source.read()
+        source_size = len(raw) if isinstance(raw, bytes) else len(raw.encode("utf-8"))
+        encoding = "text-stream"
         if isinstance(raw, bytes):
             try:
                 text = raw.decode("utf-8-sig")
+                encoding = "utf-8"
             except UnicodeDecodeError:
                 text = raw.decode("cp932")
+                encoding = "cp932"
         else:
             text = raw
         document = ezdxf.read(io.StringIO(text))
@@ -139,6 +196,21 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         )
     blocks.sort(key=lambda item: item["name"])
 
+    audit = document.audit()
+    diagnostics = _raw_dxf_diagnostics(text, source_size, encoding)
+    diagnostics.update(
+        {
+            "ezdxf_entity_database_count": len(document.entitydb),
+            "layout_count": len(space_summaries),
+            "layer_table_count": len(document.layers),
+            "block_definition_count": len(blocks),
+            "audit": {
+                "error_count": len(audit.errors),
+                "fix_count": len(audit.fixes),
+            },
+        }
+    )
+
     return {
         "schema_version": "1.0",
         "dxf_version": document.dxfversion,
@@ -149,4 +221,5 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         "spaces": space_summaries,
         "blocks": blocks,
         "inserts": inserts,
+        "diagnostics": diagnostics,
     }
