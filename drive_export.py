@@ -43,7 +43,10 @@ def save_json_to_drive(filename: str, data: dict[str, Any], folder_id: str | Non
 
     try:
         service = build("drive", "v3", credentials=credentials, cache_discovery=False)
-        payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+        # ensure_ascii=True: layer/block names can carry an unresolved surrogate-escaped
+        # byte (see docs/AI_SUPPORT_PROGRESS.md "名称復元の基本方針") that cannot be
+        # encoded as UTF-8 directly; escaping to \uXXXX keeps the same names JSON-safe.
+        payload = json.dumps(data, ensure_ascii=True, indent=2).encode("utf-8")
         media = MediaIoBaseUpload(io.BytesIO(payload), mimetype="application/json", resumable=False)
         created = (
             service.files()
