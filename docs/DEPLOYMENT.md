@@ -29,7 +29,7 @@ gcloud builds submit --config=cloudbuild.yaml .
 
 `cloudbuild.yaml` はイメージをビルド・pushし、同じGCPプロジェクト内の Cloud Run サービスを更新します。イメージの一意なタグにはCloud Buildの`$BUILD_ID`を使用するため、GitHubトリガーと`gcloud builds submit`の手動実行の両方に対応します。
 
-コンテナはPython 3.12、Flask、Gunicornで起動し、`8080`ポートで`app:app`を提供します。DXF解析に必要な`ezdxf`は、リポジトリ直下の`requirements.txt`からイメージビルド時にインストールされます。
+コンテナはPython 3.12、Flask、Gunicornで起動し、`8080`ポートで`app:app`を提供します。DXF解析に必要な`ezdxf`は1.4.4へ固定し、リポジトリ直下の`requirements.txt`からイメージビルド時にインストールします。ローカル検証もPython 3.12系と同じ`requirements.txt`を使用します。
 
 ## Cloud Build トリガー
 

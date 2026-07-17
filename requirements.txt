@@ -1,5 +1,5 @@
 Flask>=3.1,<4
-ezdxf>=1.4,<2
+ezdxf==1.4.4
 gunicorn>=23,<24
 google-api-python-client>=2.100,<3
 google-auth>=2.20,<3

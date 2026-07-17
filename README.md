@@ -22,13 +22,16 @@ Cloud Run のバックエンドは `cloudbuild.yaml` で既存GCPプロジェク
 
 DXF JSON化の検証中は、Plesk上のブラウザからCloud Runへ直接接続するため、Cloud Runを公開設定にしています。利用者認証・認可が未実装の検証用設定であり、本番運用前にLIFF等の認証検証をAPIへ追加し、公開設定を見直してください。
 
-ローカルでは次のコマンドでAPIを起動できます。
+ローカルとCloud RunはPython 3.12系、`ezdxf==1.4.4`を基準環境とします。ローカルではPython 3.12の仮想環境を作成し、次のコマンドでAPIを起動できます。
 
 ```powershell
-python -m pip install -r requirements.txt
-python -m unittest discover -s tests -v
-python app.py
+uv venv --python 3.12 .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m unittest discover -s tests -v
+.\.venv\Scripts\python app.py
 ```
+
+`uv`を使用しない場合は、Python 3.12の実行ファイルから`python -m venv .venv`を実行してください。
 
 DXF解析APIの仕様と制約は `docs/INTEGRATIONS.md` に記載しています。TFSを直接解析するものではなく、Tfas側でDXFへ変換したファイルを対象とします。
 
