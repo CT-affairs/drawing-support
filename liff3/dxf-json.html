@@ -22,35 +22,39 @@
   </nav>
   <div class="app-main">
     <header class="top-bar"><h1>DXF JSON化</h1></header>
-    <main class="app-body">
-      <div class="page-inner">
-        <section class="card upload-panel">
-          <div>
-            <p class="eyebrow">DATA PREPARATION</p>
-            <h2>Tfasから出力したDXFを解析</h2>
-            <p class="muted">`.dxf`ファイルを選択すると、レイヤー・図形種別・基本情報をJSONに変換します。TFSファイルそのものには対応していません。</p>
-          </div>
-          <input id="dxf-file" type="file" accept=".dxf,application/dxf" hidden>
-          <label class="drop-zone" id="drop-zone" for="dxf-file">
-            <strong>DXFファイルを選択</strong>
-            <span>クリック、またはここへファイルをドロップ</span>
-          </label>
-          <div class="file-name" id="file-name" aria-live="polite">ファイル未選択</div>
-          <div class="action-row">
-            <button class="btn-primary" id="parse-button" type="button" disabled>JSON化を実行</button>
-            <button class="btn-secondary" id="download-json-button" type="button" disabled>JSONをダウンロード</button>
-            <a class="btn-secondary" href="/liff3/drawing-support.html">ダッシュボードへ戻る</a>
-          </div>
-          <div class="status-message" id="status-message" role="status" aria-live="polite"></div>
-        </section>
-        <section class="card" id="result-card" hidden>
-          <h2>解析結果</h2>
-          <div class="result-summary">
-            <div class="result-value"><span>DXFバージョン</span><strong id="dxf-version">-</strong></div>
-            <div class="result-value"><span>レイヤー数</span><strong id="layer-count">-</strong></div>
-            <div class="result-value"><span>図形数</span><strong id="entity-count">-</strong></div>
-            <div class="result-value"><span>単位コード</span><strong id="unit-code">-</strong></div>
-          </div>
+    <main class="app-body app-body-split">
+      <div class="page-inner page-inner-split">
+        <div class="dxf-json-controls">
+          <section class="card upload-panel">
+            <div>
+              <p class="eyebrow">DATA PREPARATION</p>
+              <h2>Tfasから出力したDXFを解析</h2>
+              <p class="muted">`.dxf`ファイルを選択すると、レイヤー・図形種別・基本情報をJSONに変換します。TFSファイルそのものには対応していません。</p>
+            </div>
+            <input id="dxf-file" type="file" accept=".dxf,application/dxf" hidden>
+            <label class="drop-zone" id="drop-zone" for="dxf-file">
+              <strong>DXFファイルを選択</strong>
+              <span>クリック、またはここへファイルをドロップ</span>
+            </label>
+            <div class="file-name" id="file-name" aria-live="polite">ファイル未選択</div>
+            <div class="action-row">
+              <button class="btn-primary" id="parse-button" type="button" disabled>JSON化を実行</button>
+              <button class="btn-secondary" id="download-json-button" type="button" disabled>JSONをダウンロード</button>
+              <a class="btn-secondary" href="/liff3/drawing-support.html">ダッシュボードへ戻る</a>
+            </div>
+            <div class="status-message" id="status-message" role="status" aria-live="polite"></div>
+          </section>
+          <section class="card" id="result-summary-card" hidden>
+            <h2>解析結果</h2>
+            <div class="result-summary">
+              <div class="result-value"><span>DXFバージョン</span><strong id="dxf-version">-</strong></div>
+              <div class="result-value"><span>レイヤー数</span><strong id="layer-count">-</strong></div>
+              <div class="result-value"><span>図形数</span><strong id="entity-count">-</strong></div>
+              <div class="result-value"><span>単位コード</span><strong id="unit-code">-</strong></div>
+            </div>
+          </section>
+        </div>
+        <section class="card json-panel" id="json-panel" hidden>
           <div class="json-toolbar">
             <h3>解析結果ツリー</h3>
             <button class="btn-secondary" id="expand-all-button" type="button">すべて展開</button>
@@ -80,7 +84,8 @@
   const parseButton = document.getElementById('parse-button');
   const downloadJsonButton = document.getElementById('download-json-button');
   const statusMessage = document.getElementById('status-message');
-  const resultCard = document.getElementById('result-card');
+  const resultSummaryCard = document.getElementById('result-summary-card');
+  const jsonPanel = document.getElementById('json-panel');
   const jsonTree = document.getElementById('json-tree');
   const jsonOutput = document.getElementById('json-output');
   const expandAllButton = document.getElementById('expand-all-button');
@@ -244,7 +249,8 @@
     downloadJsonButton.disabled = true;
     statusMessage.textContent = '解析中…';
     statusMessage.className = 'status-message';
-    resultCard.hidden = true;
+    resultSummaryCard.hidden = true;
+    jsonPanel.hidden = true;
     parsedJson = null;
     downloadJsonButton.disabled = true;
     const formData = new FormData();
@@ -274,7 +280,8 @@
       toggleRawButton.setAttribute('aria-pressed', 'false');
       parsedJson = body;
       downloadJsonButton.disabled = false;
-      resultCard.hidden = false;
+      resultSummaryCard.hidden = false;
+      jsonPanel.hidden = false;
       statusMessage.textContent = '解析が完了しました';
     } catch (error) {
       statusMessage.textContent = error.message || '通信に失敗しました。CORSまたはCloud Runの認証設定を確認してください。';
