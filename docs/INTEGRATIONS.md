@@ -62,6 +62,22 @@ DXF解析のPoCとして、次のエンドポイントを提供します。
 
 このAPIはTFS（Tfas固有形式）を直接読みません。TfasからDXFまたはIFCへ変換した後のDXFを対象にします。将来AI APIを追加する場合は、このJSONを入力にして候補生成・異常箇所の説明・修正案を行い、座標・寸法の確定はプログラム側で検証します。
 
+### 解析結果のGoogle Drive共有ドライブ保存
+
+`/liff3/dxf-json.html`の「共有ドライブへ保存」ボタンから、`POST /api/v1/dxf/parse`の応答JSONをそのままGoogle Driveの共有ドライブへ保存できます。自動保存ではなく、利用者がボタンを押した回だけ保存します。
+
+| 項目 | 内容 |
+|---|---|
+| エンドポイント | `POST /api/v1/drive/save` |
+| 要求 | JSON本文`{"filename": "元のDXFファイル名", "data": {解析結果JSON}}` |
+| 応答 | `file_id`、`file_name`、`web_view_link` |
+| エラー | `400 invalid_request`（`data`欠落）、`502 drive_upload_failed`（認証未設定・アップロード失敗） |
+| 保存先 | 既定は共有ドライブフォルダID`1TQRI0_z6WmeG8-8VjXONRSyKwP4h97m2`。`GOOGLE_DRIVE_FOLDER_ID`で上書き可能 |
+| 認証 | サービスアカウントの鍵。`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`（鍵JSONの中身）または`GOOGLE_APPLICATION_CREDENTIALS`（鍵ファイルパス） |
+| ファイル名 | 元のDXFファイル名から拡張子を除いた部分＋UTC実行時刻＋`.json` |
+
+事前準備として、Google Cloud側でサービスアカウントを作成し、そのメールアドレスを対象の共有ドライブへ「コンテンツ管理者」以上の権限で追加しておく必要があります（今回のPoCでは追加済み）。Cloud Run側は`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`にサービスアカウント鍵の中身をシークレットとして設定します。
+
 日報ツール・帳票ツールとのAPI連携は引き続き未定義です。追加時は以下をこの文書へ記録します。
 
 - 所有ツールとエンドポイント
@@ -90,7 +106,8 @@ Cloud Buildを構成するときは、最低限次を確認します。
 - 技術スタックとローカル起動方法
 - 認証・認可方式
 - バックエンドAPIの有無とURL
-- 製図ファイルの保存先・保持期間
+- 元のDXFファイル自体の保存先・保持期間（解析結果JSONの共有ドライブ保存は実装済み。「解析結果のGoogle Drive共有ドライブ保存」参照）
+- 共有ドライブに保存したJSONの保持期間・棚卸し方法
 - Firestore共有の要否
 - Cloud Buildと本番配置方法
 

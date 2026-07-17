@@ -1,9 +1,11 @@
 import io
 import unittest
+from unittest.mock import patch
 
 import ezdxf
 
 from app import app
+from drive_export import DriveExportError
 
 
 class AppTests(unittest.TestCase):
@@ -77,6 +79,40 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["entity_counts"], {"LINE": 1})
+
+    def test_drive_save_requires_data(self):
+        response = self.client.post("/api/v1/drive/save", json={"filename": "drawing.dxf"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json["error"]["code"], "invalid_request")
+
+    def test_drive_save_uploads_and_returns_file_info(self):
+        with patch("app.save_json_to_drive") as mock_save:
+            mock_save.return_value = {
+                "id": "file-123",
+                "name": "drawing_20260717T000000Z.json",
+                "webViewLink": "https://drive.google.com/file/d/file-123/view",
+            }
+            response = self.client.post(
+                "/api/v1/drive/save",
+                json={"filename": "drawing.dxf", "data": {"schema_version": "1.0"}},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["file_id"], "file-123")
+        self.assertEqual(response.json["web_view_link"], "https://drive.google.com/file/d/file-123/view")
+        called_filename = mock_save.call_args.args[0]
+        self.assertTrue(called_filename.startswith("drawing_"))
+        self.assertTrue(called_filename.endswith(".json"))
+
+    def test_drive_save_handles_upload_failure(self):
+        with patch("app.save_json_to_drive", side_effect=DriveExportError("no credentials configured")):
+            response = self.client.post(
+                "/api/v1/drive/save",
+                json={"filename": "drawing.dxf", "data": {"schema_version": "1.0"}},
+            )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json["error"]["code"], "drive_upload_failed")
 
 
 if __name__ == "__main__":

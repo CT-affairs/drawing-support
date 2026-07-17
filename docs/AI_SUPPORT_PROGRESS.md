@@ -32,6 +32,8 @@ ezdxfでDXFを読み込み
 - DXFセクション、生レコード件数、ezdxf内部件数、監査件数などの診断情報
 - 通常読み込みで図形が取得できない場合の`recover.read()`フォールバック
 - 文字コード候補診断と選択結果の記録
+- 解析結果ツリーの折りたたみ表示（既定で畳んだ状態から選んで深堀りできるUI）
+- 「共有ドライブへ保存」ボタンによる解析結果JSONのGoogle Drive共有ドライブ保存（`POST /api/v1/drive/save`）
 
 ## 実際に確認できたこと
 
@@ -159,3 +161,4 @@ DXFの文字化けは、出力元CAD、DXFバージョン、`$DWGCODEPAGE`、中
 - Cloud Run URLが`liff3/dxf-json.html`の設定と一致しているか確認する
 - 解析対象DXFは機密情報を除いたサンプルを使う
 - まず診断用のModel Space／Paper Space／Block集計を追加する
+- Cloud Runに`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`（サービスアカウント鍵）が設定済みか確認する。未設定の場合、「共有ドライブへ保存」は`502 drive_upload_failed`になる

@@ -1,7 +1,10 @@
 import os
+import re
+from datetime import datetime, timezone
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from dxf_json import DxfParseError, parse_dxf
+from drive_export import DriveExportError, save_json_to_drive
 
 
 app = Flask(__name__)
@@ -59,6 +62,37 @@ def parse_dxf_endpoint():
         return jsonify({"error": {"code": "invalid_dxf", "message": str(exc)}}), 422
 
     return jsonify(result), 200
+
+
+def _safe_json_filename(original_name: str) -> str:
+    stem = os.path.splitext(os.path.basename(original_name or ""))[0]
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", stem).strip("_") or "dxf-analysis"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{stem}_{timestamp}.json"
+
+
+@app.post("/api/v1/drive/save")
+def save_to_drive_endpoint():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
+        return jsonify({"error": {"code": "invalid_request", "message": "data is required"}}), 400
+
+    filename = _safe_json_filename(payload.get("filename", ""))
+    try:
+        created = save_json_to_drive(filename, payload["data"])
+    except DriveExportError as exc:
+        return jsonify({"error": {"code": "drive_upload_failed", "message": str(exc)}}), 502
+
+    return (
+        jsonify(
+            {
+                "file_id": created.get("id"),
+                "file_name": created.get("name"),
+                "web_view_link": created.get("webViewLink"),
+            }
+        ),
+        200,
+    )
 
 
 @app.errorhandler(413)

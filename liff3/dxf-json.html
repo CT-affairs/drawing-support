@@ -40,9 +40,11 @@
             <div class="action-row">
               <button class="btn-primary" id="parse-button" type="button" disabled>JSON化を実行</button>
               <button class="btn-secondary" id="download-json-button" type="button" disabled>JSONをダウンロード</button>
+              <button class="btn-secondary" id="save-drive-button" type="button" disabled>共有ドライブへ保存</button>
               <a class="btn-secondary" href="/liff3/drawing-support.html">ダッシュボードへ戻る</a>
             </div>
             <div class="status-message" id="status-message" role="status" aria-live="polite"></div>
+            <div class="status-message" id="drive-status-message" role="status" aria-live="polite"></div>
           </section>
           <section class="card" id="result-summary-card" hidden>
             <h2>解析結果</h2>
@@ -83,6 +85,8 @@
   const fileName = document.getElementById('file-name');
   const parseButton = document.getElementById('parse-button');
   const downloadJsonButton = document.getElementById('download-json-button');
+  const saveDriveButton = document.getElementById('save-drive-button');
+  const driveStatusMessage = document.getElementById('drive-status-message');
   const statusMessage = document.getElementById('status-message');
   const resultSummaryCard = document.getElementById('result-summary-card');
   const jsonPanel = document.getElementById('json-panel');
@@ -234,10 +238,13 @@
     selectedFile = file;
     parsedJson = null;
     downloadJsonButton.disabled = true;
+    saveDriveButton.disabled = true;
     fileName.textContent = `${file.name}（${Math.ceil(file.size / 1024)}KB）`;
     parseButton.disabled = false;
     statusMessage.textContent = '';
     statusMessage.className = 'status-message';
+    driveStatusMessage.textContent = '';
+    driveStatusMessage.className = 'status-message';
   }
   fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
   ['dragenter', 'dragover'].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.add('is-dragover'); }));
@@ -247,12 +254,14 @@
     if (!selectedFile) return;
     parseButton.disabled = true;
     downloadJsonButton.disabled = true;
+    saveDriveButton.disabled = true;
     statusMessage.textContent = '解析中…';
     statusMessage.className = 'status-message';
+    driveStatusMessage.textContent = '';
+    driveStatusMessage.className = 'status-message';
     resultSummaryCard.hidden = true;
     jsonPanel.hidden = true;
     parsedJson = null;
-    downloadJsonButton.disabled = true;
     const formData = new FormData();
     formData.append('file', selectedFile);
     const apiBase = (window.DRAWING_SUPPORT_API_BASE || '').replace(/\/$/, '');
@@ -280,6 +289,7 @@
       toggleRawButton.setAttribute('aria-pressed', 'false');
       parsedJson = body;
       downloadJsonButton.disabled = false;
+      saveDriveButton.disabled = false;
       resultSummaryCard.hidden = false;
       jsonPanel.hidden = false;
       statusMessage.textContent = '解析が完了しました';
@@ -304,6 +314,31 @@
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(objectUrl);
+  });
+
+  saveDriveButton.addEventListener('click', async () => {
+    if (!parsedJson || !selectedFile) return;
+    saveDriveButton.disabled = true;
+    driveStatusMessage.textContent = '共有ドライブへ保存中…';
+    driveStatusMessage.className = 'status-message';
+    const apiBase = (window.DRAWING_SUPPORT_API_BASE || '').replace(/\/$/, '');
+    try {
+      const response = await fetch(`${apiBase}/api/v1/drive/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: selectedFile.name, data: parsedJson }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error?.message || '共有ドライブへの保存に失敗しました');
+      driveStatusMessage.textContent = body.web_view_link
+        ? `保存しました：${body.file_name}（${body.web_view_link}）`
+        : `保存しました：${body.file_name}`;
+    } catch (error) {
+      driveStatusMessage.textContent = error.message || '共有ドライブへの保存に失敗しました';
+      driveStatusMessage.className = 'status-message error';
+    } finally {
+      saveDriveButton.disabled = false;
+    }
   });
 })();
 </script>
