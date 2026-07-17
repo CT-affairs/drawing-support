@@ -37,6 +37,8 @@ steps:
       - --allow-unauthenticated
       - --port
       - '8080'
+      - --set-secrets
+      - 'GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON=drawing-support-google-drive-sa:latest'
       - --quiet
 
 images:

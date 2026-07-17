@@ -161,4 +161,4 @@ DXFの文字化けは、出力元CAD、DXFバージョン、`$DWGCODEPAGE`、中
 - Cloud Run URLが`liff3/dxf-json.html`の設定と一致しているか確認する
 - 解析対象DXFは機密情報を除いたサンプルを使う
 - まず診断用のModel Space／Paper Space／Block集計を追加する
-- Cloud Runに`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`（サービスアカウント鍵）が設定済みか確認する。未設定の場合、「共有ドライブへ保存」は`502 drive_upload_failed`になる
+- `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`はSecret Manager`drawing-support-google-drive-sa`から`cloudbuild.yaml`経由で設定済み。「共有ドライブへ保存」が`502`になる場合、シークレットのバージョンやIAM権限（Cloud Run実行用アカウントへの`Secret Manager のシークレット アクセサー`付与）を確認する

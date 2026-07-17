@@ -76,7 +76,7 @@ DXF解析のPoCとして、次のエンドポイントを提供します。
 | 認証 | サービスアカウントの鍵。`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`（鍵JSONの中身）または`GOOGLE_APPLICATION_CREDENTIALS`（鍵ファイルパス） |
 | ファイル名 | 元のDXFファイル名から拡張子を除いた部分＋UTC実行時刻＋`.json` |
 
-事前準備として、Google Cloud側でサービスアカウントを作成し、そのメールアドレスを対象の共有ドライブへ「コンテンツ管理者」以上の権限で追加しておく必要があります（今回のPoCでは追加済み）。Cloud Run側は`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`にサービスアカウント鍵の中身をシークレットとして設定します。
+事前準備として、Google Cloud側でサービスアカウントを作成し、そのメールアドレスを対象の共有ドライブへ「コンテンツ管理者」以上の権限で追加しておく必要があります（今回のPoCでは追加済み）。サービスアカウント鍵はSecret Manager`drawing-support-google-drive-sa`へ登録済みで、`cloudbuild.yaml`の`gcloud run deploy`が`--set-secrets`で`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`として注入します。Cloud Runの実行用サービスアカウント（`1088643883290-compute@developer.gserviceaccount.com`）にこのシークレットの`Secret Manager のシークレット アクセサー`権限を付与済みです。
 
 日報ツール・帳票ツールとのAPI連携は引き続き未定義です。追加時は以下をこの文書へ記録します。
 
