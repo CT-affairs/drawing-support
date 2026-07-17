@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import math
 from collections import Counter
-from typing import BinaryIO, Any
+from typing import BinaryIO, Any, Callable
 import ezdxf
 from ezdxf import recover
 from ezdxf.entities import DXFEntity
@@ -11,6 +11,133 @@ from ezdxf.entities import DXFEntity
 
 class DxfParseError(ValueError):
     """Raised when an uploaded file is not a readable DXF document."""
+
+
+_MOJIBAKE_MARKERS = (
+    "縺",
+    "繧",
+    "繝",
+    "譁",
+    "蜿",
+    "荳",
+    "莉",
+    "陦",
+    "逕",
+    "螟",
+    "驥",
+    "謇",
+    "菴",
+    "隱",
+    "螳",
+    "諠",
+    "陬",
+    "蝗",
+    "驟",
+)
+
+
+def _mojibake_score(value: str) -> int:
+    """Return a conservative score for common UTF-8/CP932 mojibake."""
+    marker_count = sum(value.count(marker) for marker in _MOJIBAKE_MARKERS)
+    halfwidth_count = sum("\uff61" <= char <= "\uff9f" for char in value)
+    replacement_count = value.count("\ufffd")
+    return marker_count * 2 + halfwidth_count + replacement_count * 4
+
+
+def _cp1252_surrogate_bytes(value: str) -> bytes | None:
+    """Reverse CP1252 text while preserving surrogateescaped source bytes."""
+    raw = bytearray()
+    has_non_ascii_source = False
+    for char in value:
+        codepoint = ord(char)
+        if 0xDC80 <= codepoint <= 0xDCFF:
+            raw.append(codepoint - 0xDC00)
+            has_non_ascii_source = True
+            continue
+        try:
+            encoded = char.encode("cp1252", errors="strict")
+        except UnicodeEncodeError:
+            return None
+        raw.extend(encoded)
+        has_non_ascii_source = has_non_ascii_source or any(byte >= 0x80 for byte in encoded)
+    return bytes(raw) if has_non_ascii_source else None
+
+
+def _restore_mojibake_name(value: str) -> tuple[str, dict[str, Any] | None]:
+    """Restore names damaged by common UTF-8, CP932, and CP1252 mix-ups.
+
+    A strict round trip and a clear reduction in mojibake markers are required,
+    so ordinary Japanese names and ASCII identifiers remain unchanged.
+    """
+    source_score = _mojibake_score(value)
+    candidates = []
+
+    cp1252_bytes = _cp1252_surrogate_bytes(value)
+    if cp1252_bytes is not None:
+        surrogate_count = sum(0xDC80 <= ord(char) <= 0xDCFF for char in value)
+        cp1252_marker_count = sum(0x80 <= byte <= 0x9F for byte in cp1252_bytes)
+        try:
+            restored = cp1252_bytes.decode("cp932", errors="strict")
+        except UnicodeDecodeError:
+            restored = None
+        if restored is not None and restored != value and (surrogate_count or cp1252_marker_count):
+            japanese_count = sum(
+                1
+                for char in restored
+                if "\u3040" <= char <= "\u30ff" or "\u4e00" <= char <= "\u9fff"
+            )
+            if japanese_count > 0:
+                confidence = min(0.99, 0.91 + min(0.05, japanese_count * 0.01) + (0.02 if surrogate_count else 0))
+                candidates.append(
+                    {
+                        "value": restored,
+                        "method": "cp1252_surrogateescape_bytes_to_cp932",
+                        "confidence": round(confidence, 2),
+                        "source_score": source_score,
+                        "restored_score": _mojibake_score(restored),
+                        "japanese_char_count": japanese_count,
+                        "surrogate_count": surrogate_count,
+                        "cp1252_marker_count": cp1252_marker_count,
+                        "source_bytes_hex": cp1252_bytes.hex(" "),
+                    }
+                )
+
+    if source_score >= 2:
+        for source_encoding in ("cp932", "cp1252", "latin1"):
+            try:
+                restored = value.encode(source_encoding, errors="strict").decode("utf-8", errors="strict")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                continue
+            if restored == value or any(
+                ord(char) < 32 or 0xD800 <= ord(char) <= 0xDFFF or char == "\ufffd"
+                for char in restored
+            ):
+                continue
+            restored_score = _mojibake_score(restored)
+            improvement = source_score - restored_score
+            japanese_count = sum(
+                1
+                for char in restored
+                if "\u3040" <= char <= "\u30ff" or "\u4e00" <= char <= "\u9fff"
+            )
+            if improvement < 2 or japanese_count == 0:
+                continue
+            confidence = min(0.99, 0.72 + min(0.2, improvement * 0.03) + min(0.05, japanese_count * 0.01))
+            candidates.append(
+                {
+                    "value": restored,
+                    "method": f"{source_encoding}_bytes_to_utf8",
+                    "confidence": round(confidence, 2),
+                    "source_score": source_score,
+                    "restored_score": restored_score,
+                    "japanese_char_count": japanese_count,
+                }
+            )
+
+    if not candidates:
+        return value, None
+    selected = max(candidates, key=lambda item: (item["confidence"], -item["restored_score"]))
+    return selected.pop("value"), selected
 
 
 def _number(value: Any) -> int | float | None:
@@ -26,10 +153,13 @@ def _point(value: Any) -> list[int | float]:
     return [_number(value.x), _number(value.y), _number(value.z)]
 
 
-def _entity_json(entity: DXFEntity) -> dict[str, Any]:
+def _entity_json(
+    entity: DXFEntity,
+    restore_name: Callable[[str, str], str] = lambda value, _location: value,
+) -> dict[str, Any]:
     item: dict[str, Any] = {
         "type": entity.dxftype(),
-        "layer": entity.dxf.get("layer", "0"),
+        "layer": restore_name(entity.dxf.get("layer", "0"), "entities[].layer"),
     }
     dxf = entity.dxf
 
@@ -56,7 +186,7 @@ def _entity_json(entity: DXFEntity) -> dict[str, Any]:
         item["text"] = entity.plain_text() if entity.dxftype() == "MTEXT" else dxf.text
         item["insert"] = _point(dxf.insert)
     elif entity.dxftype() == "INSERT":
-        item.update(block=dxf.name, insert=_point(dxf.insert))
+        item.update(block=restore_name(dxf.name, "entities[].block"), insert=_point(dxf.insert))
     elif entity.dxftype() == "DIMENSION":
         item["text"] = dxf.get("text", "")
 
@@ -67,12 +197,16 @@ def _entity_counts(entities: list[DXFEntity]) -> dict[str, int]:
     return dict(sorted(Counter(entity.dxftype() for entity in entities).items()))
 
 
-def _insert_json(entity: DXFEntity, space: str) -> dict[str, Any]:
+def _insert_json(
+    entity: DXFEntity,
+    space: str,
+    restore_name: Callable[[str, str], str] = lambda value, _location: value,
+) -> dict[str, Any]:
     dxf = entity.dxf
     return {
         "space": space,
-        "block": dxf.name,
-        "layer": dxf.get("layer", "0"),
+        "block": restore_name(dxf.name, "inserts[].block"),
+        "layer": restore_name(dxf.get("layer", "0"), "inserts[].layer"),
         "insert": _point(dxf.insert),
         "rotation": _number(dxf.get("rotation", 0)),
         "scale": [
@@ -278,6 +412,32 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
 
     diagnostics = _raw_dxf_diagnostics(text, source_size, encoding)
     diagnostics["encoding"] = encoding_diagnostics
+    name_decoding: dict[tuple[str, str, str], dict[str, Any]] = {}
+    inspected_name_count = 0
+    restored_name_count = 0
+
+    def restore_name(value: str, location: str) -> str:
+        nonlocal inspected_name_count, restored_name_count
+        inspected_name_count += 1
+        restored, detail = _restore_mojibake_name(value)
+        if detail is None:
+            return value
+        restored_name_count += 1
+        key = (value, restored, detail["method"])
+        mapping = name_decoding.setdefault(
+            key,
+            {
+                "original": value,
+                "restored": restored,
+                **detail,
+                "occurrence_count": 0,
+                "locations": set(),
+            },
+        )
+        mapping["occurrence_count"] += 1
+        mapping["locations"].add(location)
+        return restored
+
     loader = "standard"
     recover_info: dict[str, Any] = {"attempted": False}
     audit = None
@@ -297,7 +457,7 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         entities_in_layout = layout_entities[layout.name]
         for entity in entities_in_layout:
             if entity.dxftype() == "INSERT":
-                inserts.append(_insert_json(entity, layout.name))
+                inserts.append(_insert_json(entity, layout.name, restore_name))
         space_summaries.append(
             {
                 "name": layout.name,
@@ -308,11 +468,11 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         )
 
     modelspace_entities = layout_entities.get("Model", [])
-    entities = [_entity_json(entity) for entity in modelspace_entities]
+    entities = [_entity_json(entity, restore_name) for entity in modelspace_entities]
     counts = Counter(item["type"] for item in entities)
     layers = sorted(
         {
-            entity.dxf.get("layer", "0")
+            restore_name(entity.dxf.get("layer", "0"), "layers[]")
             for entities_in_layout in layout_entities.values()
             for entity in entities_in_layout
         }
@@ -325,7 +485,7 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         block_entities = list(block)
         blocks.append(
             {
-                "name": block.name,
+                "name": restore_name(block.name, "blocks[].name"),
                 "entity_count": len(block_entities),
                 "entity_counts": _entity_counts(block_entities),
             }
@@ -334,6 +494,15 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
 
     if audit is None:
         audit = document.audit()
+    normalized_name_decoding = []
+    for mapping in name_decoding.values():
+        normalized_name_decoding.append(
+            {
+                **mapping,
+                "locations": sorted(mapping["locations"]),
+            }
+        )
+    normalized_name_decoding.sort(key=lambda item: (item["original"], item["restored"]))
     diagnostics.update(
         {
             "loader": loader,
@@ -345,6 +514,13 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
             "audit": {
                 "error_count": len(audit.errors),
                 "fix_count": len(audit.fixes),
+            },
+            "name_decoding": {
+                "strategy": "strict_round_trip_with_mojibake_score",
+                "inspected_occurrence_count": inspected_name_count,
+                "restored_occurrence_count": restored_name_count,
+                "unchanged_occurrence_count": inspected_name_count - restored_name_count,
+                "mappings": normalized_name_decoding,
             },
         }
     )

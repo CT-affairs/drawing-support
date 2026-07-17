@@ -3,7 +3,7 @@ import unittest
 
 import ezdxf
 
-from dxf_json import DxfParseError, _encoding_diagnostics, parse_dxf
+from dxf_json import DxfParseError, _encoding_diagnostics, _restore_mojibake_name, parse_dxf
 
 
 class DxfJsonTests(unittest.TestCase):
@@ -61,6 +61,54 @@ class DxfJsonTests(unittest.TestCase):
         self.assertEqual(encoding, "cp932")
         self.assertEqual(diagnostics["dwg_codepage"], "ANSI_932")
         self.assertEqual(diagnostics["codepage_encoding"], "cp932")
+
+    def test_restore_mojibake_name_keeps_normal_names_unchanged(self):
+        self.assertEqual(_restore_mojibake_name("製図レイヤー"), ("製図レイヤー", None))
+        self.assertEqual(_restore_mojibake_name("DUCT_01"), ("DUCT_01", None))
+        self.assertEqual(_restore_mojibake_name("Café"), ("Café", None))
+
+    def test_restore_cp932_names_misread_as_cp1252_with_surrogates(self):
+        samples = {
+            "*0-0\\_001*\udc90}\u2013\u00ca\u02dcg": "*0-0\\_001*図面枠",
+            "*0-1*\u2019\u00ca\udc8f\u00ed": "*0-1*通常",
+            "*0-3*\u017d_\u201dr\u2039C": "*0-3*酸排気",
+        }
+
+        for original, expected in samples.items():
+            with self.subTest(original=original):
+                restored, diagnostics = _restore_mojibake_name(original)
+                self.assertEqual(restored, expected)
+                self.assertEqual(diagnostics["method"], "cp1252_surrogateescape_bytes_to_cp932")
+                self.assertGreaterEqual(diagnostics["confidence"], 0.94)
+                self.assertIn("source_bytes_hex", diagnostics)
+
+    def test_parse_restores_mojibake_layer_and_block_names(self):
+        mojibake_layer = "製図".encode("utf-8").decode("cp932")
+        mojibake_block = "配管".encode("utf-8").decode("cp932")
+        document = ezdxf.new("R2013")
+        document.layers.add(mojibake_layer)
+        block = document.blocks.new(mojibake_block)
+        block.add_line((0, 0), (1, 1), dxfattribs={"layer": mojibake_layer})
+        document.modelspace().add_blockref(
+            mojibake_block,
+            (0, 0),
+            dxfattribs={"layer": mojibake_layer},
+        )
+        stream = io.StringIO()
+        document.write(stream)
+
+        result = parse_dxf(stream.getvalue().encode("utf-8"))
+
+        self.assertEqual(result["layers"], ["製図"])
+        self.assertEqual(result["blocks"][0]["name"], "配管")
+        self.assertEqual(result["entities"][0]["layer"], "製図")
+        self.assertEqual(result["entities"][0]["block"], "配管")
+        self.assertEqual(result["inserts"][0]["layer"], "製図")
+        self.assertEqual(result["inserts"][0]["block"], "配管")
+        diagnostics = result["diagnostics"]["name_decoding"]
+        self.assertEqual(diagnostics["restored_occurrence_count"], 6)
+        self.assertEqual(len(diagnostics["mappings"]), 2)
+        self.assertGreaterEqual(diagnostics["mappings"][0]["confidence"], 0.8)
 
 
 if __name__ == "__main__":
