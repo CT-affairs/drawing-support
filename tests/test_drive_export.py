@@ -25,16 +25,19 @@ class DriveExportTests(unittest.TestCase):
             "webViewLink": "https://drive.example/x",
         }
 
-        # A layer name whose mojibake could not be resolved keeps a raw
-        # surrogate-escaped byte (see AI_SUPPORT_PROGRESS.md), which cannot be
-        # encoded as UTF-8 directly.
-        data = {"layers": ["*0-0\udc90}values"]}
+        # A resolved name should stay human-readable, while a name whose mojibake
+        # could not be resolved keeps a raw surrogate-escaped byte (see
+        # AI_SUPPORT_PROGRESS.md), which the plain utf-8 codec cannot encode.
+        data = {"layers": ["*0-0_001_図面枠", "*0-0\udc90}values"]}
 
         result = save_json_to_drive("drawing.json", data)
 
         self.assertEqual(result["id"], "file-1")
-        uploaded_stream = mock_media_upload.call_args.args[0]
-        decoded = json.loads(uploaded_stream.read().decode("utf-8"))
+        uploaded_bytes = mock_media_upload.call_args.args[0].read()
+
+        self.assertIn("図面枠".encode("utf-8"), uploaded_bytes)
+
+        decoded = json.loads(uploaded_bytes.decode("utf-8", errors="surrogatepass"))
         self.assertEqual(decoded, data)
 
 
