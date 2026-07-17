@@ -38,7 +38,22 @@ class DxfJsonTests(unittest.TestCase):
         self.assertEqual(result["spaces"][0]["name"], "Model")
         self.assertEqual(result["spaces"][0]["entity_count"], 3)
         self.assertEqual(result["spaces"][1]["entity_counts"], {"CIRCLE": 1})
-        self.assertEqual(result["blocks"], [{"name": "DUCT_BLOCK", "entity_count": 1, "entity_counts": {"LINE": 1}}])
+        self.assertEqual(
+            result["blocks"],
+            [
+                {
+                    "name": "DUCT_BLOCK",
+                    "entity_count": 1,
+                    "entity_counts": {"LINE": 1},
+                    "bbox": {
+                        "min": [0, 0, 0],
+                        "max": [20, 0, 0],
+                        "size": [20, 0, 0],
+                        "center": [10, 0, 0],
+                    },
+                }
+            ],
+        )
         self.assertEqual(result["inserts"][0]["block"], "DUCT_BLOCK")
         self.assertEqual(result["inserts"][0]["space"], "Model")
         self.assertGreater(result["diagnostics"]["file_size_bytes"], 0)
@@ -54,6 +69,39 @@ class DxfJsonTests(unittest.TestCase):
     def test_invalid_file_is_rejected(self):
         with self.assertRaises(DxfParseError):
             parse_dxf(b"not a dxf")
+
+    def test_block_bbox_is_none_when_block_has_no_geometry(self):
+        document = ezdxf.new("R2013")
+        document.blocks.new("EMPTY_BLOCK")
+        stream = io.StringIO()
+        document.write(stream)
+
+        result = parse_dxf(stream.getvalue().encode("utf-8"))
+
+        block = next(item for item in result["blocks"] if item["name"] == "EMPTY_BLOCK")
+        self.assertIsNone(block["bbox"])
+
+    def test_block_bbox_includes_nested_insert_geometry(self):
+        document = ezdxf.new("R2013")
+        inner = document.blocks.new("INNER")
+        inner.add_circle((0, 0), 2)
+        outer = document.blocks.new("OUTER")
+        outer.add_blockref("INNER", (10, 20), dxfattribs={"xscale": 2, "yscale": 3})
+        stream = io.StringIO()
+        document.write(stream)
+
+        result = parse_dxf(stream.getvalue().encode("utf-8"))
+
+        outer_block = next(item for item in result["blocks"] if item["name"] == "OUTER")
+        self.assertEqual(
+            outer_block["bbox"],
+            {
+                "min": [6, 14, 0],
+                "max": [14, 26, 0],
+                "size": [8, 12, 0],
+                "center": [10, 20, 0],
+            },
+        )
 
     def test_encoding_diagnostics_honor_dwg_codepage(self):
         raw = (

@@ -82,6 +82,8 @@ class AppTests(unittest.TestCase):
     def test_dxf_endpoint_returns_json(self):
         document = ezdxf.new("R2013")
         document.modelspace().add_line((0, 0), (10, 20))
+        block = document.blocks.new("FIXTURE")
+        block.add_line((0, 0), (30, 10))
         stream = io.StringIO()
         document.write(stream)
 
@@ -93,6 +95,15 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["entity_counts"], {"LINE": 1})
+        self.assertEqual(
+            response.json["blocks"][0]["bbox"],
+            {
+                "min": [0, 0, 0],
+                "max": [30, 10, 0],
+                "size": [30, 10, 0],
+                "center": [15, 5, 0],
+            },
+        )
 
     def test_drive_save_requires_data(self):
         response = self.client.post("/api/v1/drive/save", json={"filename": "drawing.dxf"})

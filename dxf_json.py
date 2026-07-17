@@ -5,7 +5,7 @@ import math
 from collections import Counter
 from typing import BinaryIO, Any, Callable
 import ezdxf
-from ezdxf import recover
+from ezdxf import bbox as ezdxf_bbox, recover
 from ezdxf.entities import DXFEntity
 from json_normalization import normalize_json_unicode
 
@@ -222,6 +222,19 @@ def _entity_json(
 
 def _entity_counts(entities: list[DXFEntity]) -> dict[str, int]:
     return dict(sorted(Counter(entity.dxftype() for entity in entities).items()))
+
+
+def _bounding_box_json(entities: list[DXFEntity]) -> dict[str, list[int | float]] | None:
+    """Return exact extents in the coordinate system of the given entities."""
+    box = ezdxf_bbox.extents(entities, fast=False)
+    if not box.has_data:
+        return None
+    return {
+        "min": _point(box.extmin),
+        "max": _point(box.extmax),
+        "size": _point(box.size),
+        "center": _point(box.center),
+    }
 
 
 def _insert_json(
@@ -540,6 +553,7 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
                 "name": restore_name(block.name, "blocks[].name"),
                 "entity_count": len(block_entities),
                 "entity_counts": _entity_counts(block_entities),
+                "bbox": _bounding_box_json(block_entities),
             }
         )
     blocks.sort(key=lambda item: item["name"])
