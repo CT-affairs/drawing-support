@@ -10,6 +10,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
+from json_normalization import normalize_json_unicode
 
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 DEFAULT_FOLDER_ID = "1TQRI0_z6WmeG8-8VjXONRSyKwP4h97m2"
@@ -45,12 +46,13 @@ def save_json_to_drive(filename: str, data: dict[str, Any], folder_id: str | Non
 
     try:
         service = _drive_service()
-        # ensure_ascii=False keeps resolved Japanese names human-readable, matching the
-        # browser's own JSON download. A layer/block name that mojibake-restoration
-        # couldn't resolve can still carry a raw surrogate-escaped byte (see
-        # docs/AI_SUPPORT_PROGRESS.md "名称復元の基本方針"); surrogatepass encodes it
-        # losslessly instead of crashing on the plain utf-8 codec.
-        payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8", errors="surrogatepass")
+        normalized_data, _unicode_diagnostics = normalize_json_unicode(data)
+        payload = json.dumps(
+            normalized_data,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        ).encode("utf-8", errors="strict")
         media = MediaIoBaseUpload(io.BytesIO(payload), mimetype="application/json", resumable=False)
         created = (
             service.files()
@@ -111,8 +113,15 @@ def get_json_file(file_id: str, folder_id: str | None = None) -> dict[str, Any]:
         raise DriveExportError(f"failed to fetch file from Google Drive: {exc}") from exc
 
     try:
-        data = json.loads(raw.decode("utf-8", errors="surrogatepass"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        try:
+            text = raw.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            # Read previously saved PoC files that contained surrogatepass bytes,
+            # then normalize them before returning them through the API.
+            text = raw.decode("utf-8", errors="surrogatepass")
+        data = json.loads(text)
+        data, _unicode_diagnostics = normalize_json_unicode(data)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise DriveExportError(f"file content is not valid JSON: {exc}") from exc
 
     return {"id": metadata["id"], "name": metadata["name"], "data": data}

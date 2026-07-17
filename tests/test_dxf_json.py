@@ -3,7 +3,13 @@ import unittest
 
 import ezdxf
 
-from dxf_json import DxfParseError, _encoding_diagnostics, _restore_mojibake_name, parse_dxf
+from dxf_json import (
+    DxfParseError,
+    _encoding_diagnostics,
+    _restore_mojibake_name,
+    _restore_mojibake_text,
+    parse_dxf,
+)
 
 
 class DxfJsonTests(unittest.TestCase):
@@ -81,6 +87,35 @@ class DxfJsonTests(unittest.TestCase):
                 self.assertEqual(diagnostics["method"], "cp1252_surrogateescape_bytes_to_cp932")
                 self.assertGreaterEqual(diagnostics["confidence"], 0.94)
                 self.assertIn("source_bytes_hex", diagnostics)
+
+    def test_restore_text_accepts_cp932_cad_symbols(self):
+        samples = {
+            "\u2021@": "①",
+            "\udc81~H700": "×H700",
+            "72.7\u2021u": "72.7㎡",
+        }
+
+        for original, expected in samples.items():
+            with self.subTest(original=original):
+                restored, diagnostics = _restore_mojibake_text(original)
+                self.assertEqual(restored, expected)
+                self.assertEqual(diagnostics["method"], "cp1252_surrogateescape_bytes_to_cp932")
+                self.assertGreater(diagnostics["cad_symbol_count"], 0)
+
+    def test_parse_restores_text_and_reports_diagnostics(self):
+        document = ezdxf.new("R2013")
+        document.modelspace().add_text("\u2021@", dxfattribs={"insert": (1, 2)})
+        stream = io.StringIO()
+        document.write(stream)
+
+        result = parse_dxf(stream.getvalue().encode("cp1252"))
+
+        self.assertEqual(result["entities"][0]["text"], "①")
+        diagnostics = result["diagnostics"]["text_decoding"]
+        self.assertEqual(diagnostics["inspected_occurrence_count"], 1)
+        self.assertEqual(diagnostics["restored_occurrence_count"], 1)
+        self.assertEqual(diagnostics["mappings"][0]["restored"], "①")
+        self.assertTrue(result["diagnostics"]["unicode_normalization"]["strict_utf8"])
 
     def test_parse_restores_mojibake_layer_and_block_names(self):
         mojibake_layer = "製図".encode("utf-8").decode("cp932")

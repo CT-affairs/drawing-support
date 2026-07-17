@@ -15,7 +15,7 @@ class DriveExportTests(unittest.TestCase):
     @patch("drive_export.MediaIoBaseUpload")
     @patch("drive_export.build")
     @patch("drive_export.service_account.Credentials.from_service_account_info")
-    def test_save_handles_unresolved_surrogate_escape_names(self, mock_from_info, mock_build, mock_media_upload):
+    def test_save_normalizes_unresolved_surrogates_to_strict_utf8(self, mock_from_info, mock_build, mock_media_upload):
         mock_from_info.return_value = MagicMock()
         mock_service = MagicMock()
         mock_build.return_value = mock_service
@@ -25,9 +25,6 @@ class DriveExportTests(unittest.TestCase):
             "webViewLink": "https://drive.example/x",
         }
 
-        # A resolved name should stay human-readable, while a name whose mojibake
-        # could not be resolved keeps a raw surrogate-escaped byte (see
-        # AI_SUPPORT_PROGRESS.md), which the plain utf-8 codec cannot encode.
         data = {"layers": ["*0-0_001_図面枠", "*0-0\udc90}values"]}
 
         result = save_json_to_drive("drawing.json", data)
@@ -37,8 +34,26 @@ class DriveExportTests(unittest.TestCase):
 
         self.assertIn("図面枠".encode("utf-8"), uploaded_bytes)
 
-        decoded = json.loads(uploaded_bytes.decode("utf-8", errors="surrogatepass"))
-        self.assertEqual(decoded, data)
+        decoded = json.loads(uploaded_bytes.decode("utf-8", errors="strict"))
+        self.assertEqual(decoded, {"layers": ["*0-0_001_図面枠", "*0-0\\x90}values"]})
+
+    @patch("drive_export.build")
+    @patch("drive_export.service_account.Credentials.from_service_account_info")
+    def test_get_json_file_normalizes_legacy_surrogatepass_content(self, mock_from_info, mock_build):
+        mock_from_info.return_value = MagicMock()
+        mock_service = MagicMock()
+        mock_build.return_value = mock_service
+        mock_service.files.return_value.get.return_value.execute.return_value = {
+            "id": "file-1",
+            "name": "legacy.json",
+            "parents": [DEFAULT_FOLDER_ID],
+        }
+        legacy = json.dumps({"text": "x\udc90}y"}, ensure_ascii=False).encode("utf-8", errors="surrogatepass")
+        mock_service.files.return_value.get_media.return_value.execute.return_value = legacy
+
+        result = get_json_file("file-1")
+
+        self.assertEqual(result["data"], {"text": "x\\x90}y"})
 
     @patch("drive_export.build")
     @patch("drive_export.service_account.Credentials.from_service_account_info")

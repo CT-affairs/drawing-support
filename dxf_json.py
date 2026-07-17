@@ -7,6 +7,7 @@ from typing import BinaryIO, Any, Callable
 import ezdxf
 from ezdxf import recover
 from ezdxf.entities import DXFEntity
+from json_normalization import normalize_json_unicode
 
 
 class DxfParseError(ValueError):
@@ -63,11 +64,25 @@ def _cp1252_surrogate_bytes(value: str) -> bytes | None:
     return bytes(raw) if has_non_ascii_source else None
 
 
-def _restore_mojibake_name(value: str) -> tuple[str, dict[str, Any] | None]:
-    """Restore names damaged by common UTF-8, CP932, and CP1252 mix-ups.
+_CAD_TEXT_SYMBOLS = {"×", "㎡", "※", "φ", "Φ", "°", "±"}
+
+
+def _cad_symbol_count(value: str) -> int:
+    return sum(
+        char in _CAD_TEXT_SYMBOLS or "\u2460" <= char <= "\u24ff"
+        for char in value
+    )
+
+
+def _restore_mojibake_name(
+    value: str,
+    allow_cad_symbols: bool = False,
+) -> tuple[str, dict[str, Any] | None]:
+    """Restore text damaged by common UTF-8, CP932, and CP1252 mix-ups.
 
     A strict round trip and a clear reduction in mojibake markers are required,
-    so ordinary Japanese names and ASCII identifiers remain unchanged.
+    so ordinary Japanese text and ASCII identifiers remain unchanged. CAD text
+    may additionally accept symbol-only results such as circled numbers and ×.
     """
     source_score = _mojibake_score(value)
     candidates = []
@@ -86,8 +101,10 @@ def _restore_mojibake_name(value: str) -> tuple[str, dict[str, Any] | None]:
                 for char in restored
                 if "\u3040" <= char <= "\u30ff" or "\u4e00" <= char <= "\u9fff"
             )
-            if japanese_count > 0:
-                confidence = min(0.99, 0.91 + min(0.05, japanese_count * 0.01) + (0.02 if surrogate_count else 0))
+            cad_symbol_count = _cad_symbol_count(restored) if allow_cad_symbols else 0
+            recognized_count = japanese_count + cad_symbol_count
+            if recognized_count > 0:
+                confidence = min(0.99, 0.91 + min(0.05, recognized_count * 0.01) + (0.02 if surrogate_count else 0))
                 candidates.append(
                     {
                         "value": restored,
@@ -96,6 +113,7 @@ def _restore_mojibake_name(value: str) -> tuple[str, dict[str, Any] | None]:
                         "source_score": source_score,
                         "restored_score": _mojibake_score(restored),
                         "japanese_char_count": japanese_count,
+                        "cad_symbol_count": cad_symbol_count,
                         "surrogate_count": surrogate_count,
                         "cp1252_marker_count": cp1252_marker_count,
                         "source_bytes_hex": cp1252_bytes.hex(" "),
@@ -120,9 +138,11 @@ def _restore_mojibake_name(value: str) -> tuple[str, dict[str, Any] | None]:
                 for char in restored
                 if "\u3040" <= char <= "\u30ff" or "\u4e00" <= char <= "\u9fff"
             )
-            if improvement < 2 or japanese_count == 0:
+            cad_symbol_count = _cad_symbol_count(restored) if allow_cad_symbols else 0
+            recognized_count = japanese_count + cad_symbol_count
+            if improvement < 2 or recognized_count == 0:
                 continue
-            confidence = min(0.99, 0.72 + min(0.2, improvement * 0.03) + min(0.05, japanese_count * 0.01))
+            confidence = min(0.99, 0.72 + min(0.2, improvement * 0.03) + min(0.05, recognized_count * 0.01))
             candidates.append(
                 {
                     "value": restored,
@@ -131,6 +151,7 @@ def _restore_mojibake_name(value: str) -> tuple[str, dict[str, Any] | None]:
                     "source_score": source_score,
                     "restored_score": restored_score,
                     "japanese_char_count": japanese_count,
+                    "cad_symbol_count": cad_symbol_count,
                 }
             )
 
@@ -138,6 +159,10 @@ def _restore_mojibake_name(value: str) -> tuple[str, dict[str, Any] | None]:
         return value, None
     selected = max(candidates, key=lambda item: (item["confidence"], -item["restored_score"]))
     return selected.pop("value"), selected
+
+
+def _restore_mojibake_text(value: str) -> tuple[str, dict[str, Any] | None]:
+    return _restore_mojibake_name(value, allow_cad_symbols=True)
 
 
 def _number(value: Any) -> int | float | None:
@@ -156,6 +181,7 @@ def _point(value: Any) -> list[int | float]:
 def _entity_json(
     entity: DXFEntity,
     restore_name: Callable[[str, str], str] = lambda value, _location: value,
+    restore_text: Callable[[str, str], str] = lambda value, _location: value,
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
         "type": entity.dxftype(),
@@ -183,12 +209,13 @@ def _entity_json(
             end_angle=_number(dxf.end_angle),
         )
     elif entity.dxftype() in {"TEXT", "MTEXT"}:
-        item["text"] = entity.plain_text() if entity.dxftype() == "MTEXT" else dxf.text
+        raw_text = entity.plain_text() if entity.dxftype() == "MTEXT" else dxf.text
+        item["text"] = restore_text(raw_text, "entities[].text")
         item["insert"] = _point(dxf.insert)
     elif entity.dxftype() == "INSERT":
         item.update(block=restore_name(dxf.name, "entities[].block"), insert=_point(dxf.insert))
     elif entity.dxftype() == "DIMENSION":
-        item["text"] = dxf.get("text", "")
+        item["text"] = restore_text(dxf.get("text", ""), "entities[].text")
 
     return item
 
@@ -413,8 +440,11 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
     diagnostics = _raw_dxf_diagnostics(text, source_size, encoding)
     diagnostics["encoding"] = encoding_diagnostics
     name_decoding: dict[tuple[str, str, str], dict[str, Any]] = {}
+    text_decoding: dict[tuple[str, str, str], dict[str, Any]] = {}
     inspected_name_count = 0
     restored_name_count = 0
+    inspected_text_count = 0
+    restored_text_count = 0
 
     def restore_name(value: str, location: str) -> str:
         nonlocal inspected_name_count, restored_name_count
@@ -425,6 +455,28 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         restored_name_count += 1
         key = (value, restored, detail["method"])
         mapping = name_decoding.setdefault(
+            key,
+            {
+                "original": value,
+                "restored": restored,
+                **detail,
+                "occurrence_count": 0,
+                "locations": set(),
+            },
+        )
+        mapping["occurrence_count"] += 1
+        mapping["locations"].add(location)
+        return restored
+
+    def restore_text(value: str, location: str) -> str:
+        nonlocal inspected_text_count, restored_text_count
+        inspected_text_count += 1
+        restored, detail = _restore_mojibake_text(value)
+        if detail is None:
+            return value
+        restored_text_count += 1
+        key = (value, restored, detail["method"])
+        mapping = text_decoding.setdefault(
             key,
             {
                 "original": value,
@@ -468,7 +520,7 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         )
 
     modelspace_entities = layout_entities.get("Model", [])
-    entities = [_entity_json(entity, restore_name) for entity in modelspace_entities]
+    entities = [_entity_json(entity, restore_name, restore_text) for entity in modelspace_entities]
     counts = Counter(item["type"] for item in entities)
     layers = sorted(
         {
@@ -503,6 +555,15 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
             }
         )
     normalized_name_decoding.sort(key=lambda item: (item["original"], item["restored"]))
+    normalized_text_decoding = []
+    for mapping in text_decoding.values():
+        normalized_text_decoding.append(
+            {
+                **mapping,
+                "locations": sorted(mapping["locations"]),
+            }
+        )
+    normalized_text_decoding.sort(key=lambda item: (item["original"], item["restored"]))
     diagnostics.update(
         {
             "loader": loader,
@@ -522,10 +583,17 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
                 "unchanged_occurrence_count": inspected_name_count - restored_name_count,
                 "mappings": normalized_name_decoding,
             },
+            "text_decoding": {
+                "strategy": "strict_round_trip_with_cad_symbol_support",
+                "inspected_occurrence_count": inspected_text_count,
+                "restored_occurrence_count": restored_text_count,
+                "unchanged_occurrence_count": inspected_text_count - restored_text_count,
+                "mappings": normalized_text_decoding,
+            },
         }
     )
 
-    return {
+    result = {
         "schema_version": "1.0",
         "dxf_version": document.dxfversion,
         "units": _number(document.header.get("$INSUNITS")),
@@ -537,3 +605,6 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         "inserts": inserts,
         "diagnostics": diagnostics,
     }
+    normalized_result, unicode_diagnostics = normalize_json_unicode(result)
+    normalized_result["diagnostics"]["unicode_normalization"] = unicode_diagnostics
+    return normalized_result
