@@ -34,6 +34,8 @@ ezdxfでDXFを読み込み
 - 文字コード候補診断と選択結果の記録
 - 解析結果ツリーの折りたたみ表示（既定で畳んだ状態から選んで深堀りできるUI）
 - 「共有ドライブへ保存」ボタンによる解析結果JSONのGoogle Drive共有ドライブ保存（`POST /api/v1/drive/save`）
+- `/liff3/drive-json-viewer.html`：共有ドライブ保存済みJSONの一覧・ツリー表示専用画面（解析は行わない、`GET /api/v1/drive/list`・`GET /api/v1/drive/file/<file_id>`）
+- JSONツリー表示ロジックを`/liff3/js/json-tree.js`として`dxf-json.html`と共通化
 
 ## 実際に確認できたこと
 

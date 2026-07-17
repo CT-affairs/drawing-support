@@ -26,6 +26,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn("製図_ダッシュボード", dashboard.text)
         self.assertIn("/liff3/dxf-json.html", dashboard.text)
+        self.assertIn("/liff3/drive-json-viewer.html", dashboard.text)
         self.assertEqual(dxf_page.status_code, 200)
         self.assertIn("DXF_JSON化", dxf_page.text)
         self.assertIn("/api/v1/dxf/parse", dxf_page.text)
@@ -34,6 +35,19 @@ class AppTests(unittest.TestCase):
         dashboard.close()
         dxf_page.close()
         stylesheet.close()
+
+    def test_drive_json_viewer_page_is_available(self):
+        page = self.client.get("/liff3/drive-json-viewer.html")
+        script = self.client.get("/liff3/js/json-tree.js")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("共有ドライブJSON閲覧", page.text)
+        self.assertIn("/api/v1/drive/list", page.text)
+        self.assertIn("/api/v1/drive/file/", page.text)
+        self.assertEqual(script.status_code, 200)
+        self.assertIn("JsonTree", script.text)
+        page.close()
+        script.close()
 
     def test_dxf_endpoint_requires_file(self):
         response = self.client.post("/api/v1/dxf/parse")
@@ -113,6 +127,42 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json["error"]["code"], "drive_upload_failed")
+
+    def test_drive_list_returns_files(self):
+        with patch("app.list_json_files") as mock_list:
+            mock_list.return_value = [
+                {"id": "file-1", "name": "a.json", "modifiedTime": "2026-07-17T00:00:00Z", "size": "123"},
+            ]
+            response = self.client.get("/api/v1/drive/list")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json["files"],
+            [{"id": "file-1", "name": "a.json", "modified_time": "2026-07-17T00:00:00Z", "size": "123"}],
+        )
+
+    def test_drive_list_handles_failure(self):
+        with patch("app.list_json_files", side_effect=DriveExportError("no credentials configured")):
+            response = self.client.get("/api/v1/drive/list")
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json["error"]["code"], "drive_list_failed")
+
+    def test_drive_get_file_returns_data(self):
+        with patch("app.get_json_file") as mock_get:
+            mock_get.return_value = {"id": "file-1", "name": "a.json", "data": {"schema_version": "1.0"}}
+            response = self.client.get("/api/v1/drive/file/file-1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["file_id"], "file-1")
+        self.assertEqual(response.json["data"], {"schema_version": "1.0"})
+
+    def test_drive_get_file_handles_failure(self):
+        with patch("app.get_json_file", side_effect=DriveExportError("file is not in the configured shared drive folder")):
+            response = self.client.get("/api/v1/drive/file/file-1")
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json["error"]["code"], "drive_fetch_failed")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>製図サポート｜共有ドライブJSON閲覧</title>
+  <link rel="stylesheet" href="/liff3/drawing-support.css">
+  <script src="/liff3/js/json-tree.js"></script>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="somu-sidebar" aria-label="総務メニュー">
+    <div class="somu-sidebar-header"><h2>Clean-techno</h2></div>
+    <ul class="somu-nav-links">
+      <li><span class="somu-nav-header">＜製図サポート＞</span></li>
+      <li><a class="somu-nav-item" href="/liff3/drawing-support.html">製図_ダッシュボード</a></li>
+      <li><a class="somu-nav-item" href="/liff3/dxf-json.html">DXF_JSON化</a></li>
+      <li><a class="somu-nav-item active" href="/liff3/drive-json-viewer.html">Drive_JSON閲覧</a></li>
+      <li><span class="somu-nav-header">＜その他リンク＞</span></li>
+      <li><a class="somu-nav-item" href="https://clean-techno.com/liff/admin.html">日報ツール</a></li>
+      <li><a class="somu-nav-item" href="/liff2/purchase-order-dashboard.html">発注ツール</a></li>
+    </ul>
+    <div class="somu-sidebar-footer"><div id="somu-user-info">未ログイン</div></div>
+  </nav>
+  <div class="app-main">
+    <header class="top-bar"><h1>共有ドライブJSON閲覧</h1></header>
+    <main class="app-body app-body-split">
+      <div class="page-inner page-inner-split">
+        <div class="dxf-json-controls">
+          <section class="card">
+            <div>
+              <p class="eyebrow">DATA REVIEW</p>
+              <h2>共有ドライブのJSONファイル</h2>
+              <p class="muted">解析結果を保存した共有ドライブのフォルダから、JSONファイルを選んでツリー表示します。ここでは解析は行いません。</p>
+            </div>
+            <div class="action-row">
+              <button class="btn-secondary" id="refresh-button" type="button">一覧を更新</button>
+              <a class="btn-secondary" href="/liff3/drawing-support.html">ダッシュボードへ戻る</a>
+            </div>
+            <div class="status-message" id="list-status-message" role="status" aria-live="polite"></div>
+            <ul class="drive-file-list" id="file-list"></ul>
+          </section>
+        </div>
+        <section class="card json-panel" id="json-panel">
+          <div class="json-toolbar">
+            <h3 id="json-panel-title">JSONツリー</h3>
+            <button class="btn-secondary" id="expand-all-button" type="button" disabled>すべて展開</button>
+            <button class="btn-secondary" id="collapse-all-button" type="button" disabled>すべて畳む</button>
+            <button class="btn-secondary" id="toggle-raw-button" type="button" aria-pressed="false" disabled>RAW JSONを表示</button>
+          </div>
+          <p class="muted">左の一覧からファイルを選ぶと表示します。既定では各項目を畳んだ状態で表示します。</p>
+          <div class="json-tree" id="json-tree" role="tree" aria-label="JSONのツリー表示">
+            <div class="json-empty">左の一覧からファイルを選択してください。</div>
+          </div>
+          <pre class="json-output" id="json-output" hidden></pre>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+<script>
+  // フロントエンドはPlesk、APIはCloud Runのため、相対URLには送信しない。
+  // 別プロジェクト・別サービスの場合はこの値をデプロイ先に合わせて変更する。
+  window.DRAWING_SUPPORT_API_BASE = window.DRAWING_SUPPORT_API_BASE
+    || "https://drawing-support-1088643883290.asia-northeast1.run.app";
+</script>
+<script>
+(() => {
+  const refreshButton = document.getElementById('refresh-button');
+  const listStatusMessage = document.getElementById('list-status-message');
+  const fileListEl = document.getElementById('file-list');
+  const jsonPanelTitle = document.getElementById('json-panel-title');
+  const jsonTree = document.getElementById('json-tree');
+  const jsonOutput = document.getElementById('json-output');
+  const expandAllButton = document.getElementById('expand-all-button');
+  const collapseAllButton = document.getElementById('collapse-all-button');
+  const toggleRawButton = document.getElementById('toggle-raw-button');
+  const treeButtons = [expandAllButton, collapseAllButton, toggleRawButton];
+
+  JsonTree.attachToolbar({ tree: jsonTree, output: jsonOutput, expandAllButton, collapseAllButton, toggleRawButton });
+
+  function apiBase() {
+    return (window.DRAWING_SUPPORT_API_BASE || '').replace(/\/$/, '');
+  }
+
+  function formatSize(size) {
+    const n = Number(size);
+    if (!Number.isFinite(n)) return '';
+    return n < 1024 ? `${n}B` : `${Math.ceil(n / 1024)}KB`;
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? iso : date.toLocaleString('ja-JP');
+  }
+
+  function renderFileList(files) {
+    fileListEl.innerHTML = '';
+    if (!files.length) {
+      const empty = document.createElement('li');
+      empty.className = 'muted';
+      empty.textContent = 'JSONファイルが見つかりません。';
+      fileListEl.appendChild(empty);
+      return;
+    }
+    files.forEach((file) => {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'drive-file-item';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'drive-file-name';
+      nameEl.textContent = file.name;
+      const metaEl = document.createElement('span');
+      metaEl.className = 'drive-file-meta';
+      metaEl.textContent = [formatTime(file.modified_time), formatSize(file.size)].filter(Boolean).join(' ・ ');
+      button.appendChild(nameEl);
+      button.appendChild(metaEl);
+      button.addEventListener('click', () => loadFile(file.id, button));
+      li.appendChild(button);
+      fileListEl.appendChild(li);
+    });
+  }
+
+  async function refreshList() {
+    refreshButton.disabled = true;
+    listStatusMessage.textContent = '一覧を読み込み中…';
+    listStatusMessage.className = 'status-message';
+    try {
+      const response = await fetch(`${apiBase()}/api/v1/drive/list`);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error?.message || '一覧の取得に失敗しました');
+      const files = body.files || [];
+      renderFileList(files);
+      listStatusMessage.textContent = `${files.length}件のJSONファイル`;
+      listStatusMessage.className = 'status-message';
+    } catch (error) {
+      listStatusMessage.textContent = error.message || '通信に失敗しました。CORSまたはCloud Runの認証設定を確認してください。';
+      listStatusMessage.className = 'status-message error';
+    } finally {
+      refreshButton.disabled = false;
+    }
+  }
+
+  async function loadFile(fileId, buttonEl) {
+    Array.from(fileListEl.querySelectorAll('.drive-file-item')).forEach((el) => el.classList.remove('active'));
+    if (buttonEl) buttonEl.classList.add('active');
+    listStatusMessage.textContent = 'ファイルを読み込み中…';
+    listStatusMessage.className = 'status-message';
+    treeButtons.forEach((btn) => { btn.disabled = true; });
+    try {
+      const response = await fetch(`${apiBase()}/api/v1/drive/file/${encodeURIComponent(fileId)}`);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error?.message || 'ファイルの取得に失敗しました');
+      jsonPanelTitle.textContent = body.file_name || 'JSONツリー';
+      JsonTree.showResult({ tree: jsonTree, output: jsonOutput, toggleRawButton, data: body.data });
+      treeButtons.forEach((btn) => { btn.disabled = false; });
+      listStatusMessage.textContent = '';
+    } catch (error) {
+      listStatusMessage.textContent = error.message || '通信に失敗しました。';
+      listStatusMessage.className = 'status-message error';
+    }
+  }
+
+  refreshButton.addEventListener('click', refreshList);
+  refreshList();
+})();
+</script>
+</body>
+</html>

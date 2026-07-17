@@ -78,6 +78,24 @@ DXF解析のPoCとして、次のエンドポイントを提供します。
 
 事前準備として、Google Cloud側でサービスアカウントを作成し、そのメールアドレスを対象の共有ドライブへ「コンテンツ管理者」以上の権限で追加しておく必要があります（今回のPoCでは追加済み）。サービスアカウント鍵はSecret Manager`drawing-support-google-drive-sa`へ登録済みで、`cloudbuild.yaml`の`gcloud run deploy`が`--set-secrets`で`GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`として注入します。Cloud Runの実行用サービスアカウント（`1088643883290-compute@developer.gserviceaccount.com`）にこのシークレットの`Secret Manager のシークレット アクセサー`権限を付与済みです。
 
+### 共有ドライブのJSON閲覧（解析は行わない）
+
+`/liff3/drive-json-viewer.html`は、共有ドライブに保存済みのJSONを一覧表示し、選んだファイルをツリー表示する専用画面です。DXFの解析は行わず、既にJSON化済みのファイルを確認する用途に限定します。ツリー表示部分は`/liff3/js/json-tree.js`として`dxf-json.html`と共通化しています。
+
+| 項目 | 内容 |
+|---|---|
+| エンドポイント | `GET /api/v1/drive/list` |
+| 応答 | `files`（配列。各要素は`id`、`name`、`modified_time`、`size`） |
+| 対象 | 共有ドライブ保存と同じ既定フォルダ直下の`mimeType=application/json`のファイルのみ |
+| エラー | `502 drive_list_failed` |
+
+| 項目 | 内容 |
+|---|---|
+| エンドポイント | `GET /api/v1/drive/file/<file_id>` |
+| 応答 | `file_id`、`file_name`、`data`（JSONの中身） |
+| 安全対策 | 取得前に対象ファイルの`parents`が既定フォルダと一致するか検証し、一致しない場合は取得せず`502 drive_fetch_failed`を返す |
+| エラー | `502 drive_fetch_failed`（フォルダ不一致、取得失敗、JSONとして不正な内容を含む） |
+
 日報ツール・帳票ツールとのAPI連携は引き続き未定義です。追加時は以下をこの文書へ記録します。
 
 - 所有ツールとエンドポイント

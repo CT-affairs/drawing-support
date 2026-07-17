@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>製図サポート｜DXF JSON化</title>
   <link rel="stylesheet" href="/liff3/drawing-support.css">
+  <script src="/liff3/js/json-tree.js"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -14,6 +15,7 @@
       <li><span class="somu-nav-header">＜製図サポート＞</span></li>
       <li><a class="somu-nav-item" href="/liff3/drawing-support.html">製図_ダッシュボード</a></li>
       <li><a class="somu-nav-item active" href="/liff3/dxf-json.html">DXF_JSON化</a></li>
+      <li><a class="somu-nav-item" href="/liff3/drive-json-viewer.html">Drive_JSON閲覧</a></li>
       <li><span class="somu-nav-header">＜その他リンク＞</span></li>
       <li><a class="somu-nav-item" href="https://clean-techno.com/liff/admin.html">日報ツール</a></li>
       <li><a class="somu-nav-item" href="/liff2/purchase-order-dashboard.html">発注ツール</a></li>
@@ -98,129 +100,8 @@
   let selectedFile = null;
   let parsedJson = null;
 
-  function jsonTypeSummary(value) {
-    if (Array.isArray(value)) return `配列 [${value.length}]`;
-    return `オブジェクト {${Object.keys(value).length}}`;
-  }
+  JsonTree.attachToolbar({ tree: jsonTree, output: jsonOutput, expandAllButton, collapseAllButton, toggleRawButton });
 
-  function formatPrimitive(value) {
-    if (value === null) return { text: 'null', cls: 'json-value-null' };
-    if (typeof value === 'string') return { text: JSON.stringify(value), cls: 'json-value-string' };
-    if (typeof value === 'number') return { text: String(value), cls: 'json-value-number' };
-    if (typeof value === 'boolean') return { text: String(value), cls: 'json-value-boolean' };
-    return { text: String(value), cls: 'json-value-string' };
-  }
-
-  function renderEntry(key, value) {
-    const node = document.createElement('div');
-    node.className = 'json-node';
-    const row = document.createElement('div');
-    row.className = 'json-row';
-    const isContainer = value !== null && typeof value === 'object';
-
-    const toggle = document.createElement('span');
-    toggle.className = 'json-toggle' + (isContainer ? '' : ' json-toggle-spacer');
-    toggle.textContent = isContainer ? '▶' : '';
-    row.appendChild(toggle);
-
-    if (key !== null) {
-      const keyEl = document.createElement('span');
-      keyEl.className = 'json-key';
-      keyEl.textContent = key;
-      row.appendChild(keyEl);
-      const colon = document.createElement('span');
-      colon.className = 'json-colon';
-      colon.textContent = ':';
-      row.appendChild(colon);
-    }
-
-    if (!isContainer) {
-      const formatted = formatPrimitive(value);
-      const valueEl = document.createElement('span');
-      valueEl.className = `json-value ${formatted.cls}`;
-      valueEl.textContent = formatted.text;
-      row.appendChild(valueEl);
-      node.appendChild(row);
-      return node;
-    }
-
-    const summary = document.createElement('span');
-    summary.className = 'json-summary';
-    summary.textContent = jsonTypeSummary(value);
-    row.appendChild(summary);
-
-    const childrenContainer = document.createElement('div');
-    childrenContainer.className = 'json-children';
-    childrenContainer.hidden = true;
-
-    let built = false;
-    function setExpanded(expand) {
-      if (expand && !built) {
-        built = true;
-        const entries = Array.isArray(value)
-          ? value.map((item, index) => [`[${index}]`, item])
-          : Object.entries(value);
-        if (entries.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'json-empty';
-          empty.textContent = Array.isArray(value) ? '(空の配列)' : '(空のオブジェクト)';
-          childrenContainer.appendChild(empty);
-        } else {
-          entries.forEach(([childKey, childValue]) => {
-            childrenContainer.appendChild(renderEntry(childKey, childValue));
-          });
-        }
-      }
-      childrenContainer.hidden = !expand;
-      toggle.textContent = expand ? '▼' : '▶';
-      row.setAttribute('aria-expanded', String(expand));
-    }
-
-    row.tabIndex = 0;
-    row.setAttribute('role', 'button');
-    row.setAttribute('aria-expanded', 'false');
-    row.addEventListener('click', () => setExpanded(childrenContainer.hidden));
-    row.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        setExpanded(childrenContainer.hidden);
-      }
-    });
-
-    node._setExpanded = setExpanded;
-    node._childrenContainer = childrenContainer;
-    node.appendChild(row);
-    node.appendChild(childrenContainer);
-    return node;
-  }
-
-  function buildJsonTree(container, data) {
-    container.innerHTML = '';
-    const entries = Array.isArray(data) ? data.map((item, index) => [`[${index}]`, item]) : Object.entries(data || {});
-    entries.forEach(([key, value]) => container.appendChild(renderEntry(key, value)));
-  }
-
-  function walkNodes(container, visit) {
-    Array.from(container.children).forEach((node) => {
-      if (!node.classList || !node.classList.contains('json-node')) return;
-      visit(node);
-      if (node._childrenContainer) walkNodes(node._childrenContainer, visit);
-    });
-  }
-
-  expandAllButton.addEventListener('click', () => {
-    walkNodes(jsonTree, (node) => { if (node._setExpanded) node._setExpanded(true); });
-  });
-  collapseAllButton.addEventListener('click', () => {
-    walkNodes(jsonTree, (node) => { if (node._setExpanded) node._setExpanded(false); });
-  });
-  toggleRawButton.addEventListener('click', () => {
-    const showRaw = jsonOutput.hidden;
-    jsonOutput.hidden = !showRaw;
-    jsonTree.hidden = showRaw;
-    toggleRawButton.textContent = showRaw ? 'ツリー表示に戻す' : 'RAW JSONを表示';
-    toggleRawButton.setAttribute('aria-pressed', String(showRaw));
-  });
   function setFile(file) {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.dxf')) {
@@ -281,12 +162,7 @@
       document.getElementById('layer-count').textContent = (body.layers || []).length;
       document.getElementById('entity-count').textContent = Object.values(body.entity_counts || {}).reduce((a, b) => a + b, 0);
       document.getElementById('unit-code').textContent = body.units ?? '未設定';
-      jsonOutput.textContent = JSON.stringify(body, null, 2);
-      buildJsonTree(jsonTree, body);
-      jsonOutput.hidden = true;
-      jsonTree.hidden = false;
-      toggleRawButton.textContent = 'RAW JSONを表示';
-      toggleRawButton.setAttribute('aria-pressed', 'false');
+      JsonTree.showResult({ tree: jsonTree, output: jsonOutput, toggleRawButton, data: body });
       parsedJson = body;
       downloadJsonButton.disabled = false;
       saveDriveButton.disabled = false;

@@ -77,6 +77,12 @@ pre.json-output { overflow: auto; flex: 1; min-height: 0; margin: 0; padding: 16
 .json-value-null { color: #7f8c9a; font-style: italic; }
 .json-children { margin-left: 8px; padding-left: 12px; border-left: 1px dashed rgba(255, 255, 255, 0.15); }
 .json-empty { margin-left: 24px; padding: 2px 4px; color: #6c7a89; font-style: italic; }
+.drive-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 100%; overflow-y: auto; }
+.drive-file-item { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid #e9ecef; border-radius: 6px; background: #f8f9fa; cursor: pointer; font: inherit; }
+.drive-file-item:hover { background: #f1f3f5; border-color: #adb5bd; }
+.drive-file-item.active { background: #eaf3ec; border-color: #397939; }
+.drive-file-name { display: block; font-size: .88rem; color: #222; word-break: break-all; }
+.drive-file-meta { display: block; margin-top: 2px; font-size: .75rem; color: #6c757d; }
 @media (max-width: 720px) {
   .app-shell { display: block; }
   .somu-sidebar { width: 100%; min-height: auto; }

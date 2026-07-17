@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from dxf_json import DxfParseError, parse_dxf
-from drive_export import DriveExportError, save_json_to_drive
+from drive_export import DriveExportError, get_json_file, list_json_files, save_json_to_drive
 
 
 app = Flask(__name__)
@@ -26,7 +26,7 @@ def add_api_cors_headers(response):
         if origin in API_CORS_ORIGINS:
             response.headers["Access-Control-Allow-Origin"] = origin
 
-        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         response.headers["Vary"] = "Origin"
     return response
@@ -91,6 +91,44 @@ def save_to_drive_endpoint():
                 "web_view_link": created.get("webViewLink"),
             }
         ),
+        200,
+    )
+
+
+@app.get("/api/v1/drive/list")
+def list_drive_files_endpoint():
+    try:
+        files = list_json_files()
+    except DriveExportError as exc:
+        return jsonify({"error": {"code": "drive_list_failed", "message": str(exc)}}), 502
+
+    return (
+        jsonify(
+            {
+                "files": [
+                    {
+                        "id": item.get("id"),
+                        "name": item.get("name"),
+                        "modified_time": item.get("modifiedTime"),
+                        "size": item.get("size"),
+                    }
+                    for item in files
+                ]
+            }
+        ),
+        200,
+    )
+
+
+@app.get("/api/v1/drive/file/<file_id>")
+def get_drive_file_endpoint(file_id):
+    try:
+        result = get_json_file(file_id)
+    except DriveExportError as exc:
+        return jsonify({"error": {"code": "drive_fetch_failed", "message": str(exc)}}), 502
+
+    return (
+        jsonify({"file_id": result["id"], "file_name": result["name"], "data": result["data"]}),
         200,
     )
 

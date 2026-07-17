@@ -35,14 +35,16 @@ def _load_credentials() -> service_account.Credentials:
     raise DriveExportError("no Google Drive service account credentials configured")
 
 
+def _drive_service():
+    return build("drive", "v3", credentials=_load_credentials(), cache_discovery=False)
+
+
 def save_json_to_drive(filename: str, data: dict[str, Any], folder_id: str | None = None) -> dict[str, Any]:
     """Upload `data` as a JSON file into the configured Google Drive shared drive folder."""
     target_folder_id = folder_id or os.getenv("GOOGLE_DRIVE_FOLDER_ID", DEFAULT_FOLDER_ID)
 
-    credentials = _load_credentials()
-
     try:
-        service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+        service = _drive_service()
         # ensure_ascii=False keeps resolved Japanese names human-readable, matching the
         # browser's own JSON download. A layer/block name that mojibake-restoration
         # couldn't resolve can still carry a raw surrogate-escaped byte (see
@@ -64,3 +66,53 @@ def save_json_to_drive(filename: str, data: dict[str, Any], folder_id: str | Non
         raise DriveExportError(f"failed to upload to Google Drive: {exc}") from exc
 
     return created
+
+
+def list_json_files(folder_id: str | None = None) -> list[dict[str, Any]]:
+    """List JSON files directly inside the configured shared drive folder."""
+    target_folder_id = folder_id or os.getenv("GOOGLE_DRIVE_FOLDER_ID", DEFAULT_FOLDER_ID)
+
+    try:
+        service = _drive_service()
+        response = (
+            service.files()
+            .list(
+                q=f"'{target_folder_id}' in parents and trashed = false and mimeType = 'application/json'",
+                fields="files(id, name, modifiedTime, size)",
+                orderBy="modifiedTime desc",
+                pageSize=200,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
+    except (HttpError, GoogleAuthError) as exc:
+        raise DriveExportError(f"failed to list files from Google Drive: {exc}") from exc
+
+    return response.get("files", [])
+
+
+def get_json_file(file_id: str, folder_id: str | None = None) -> dict[str, Any]:
+    """Fetch a single JSON file's content from the configured shared drive folder."""
+    target_folder_id = folder_id or os.getenv("GOOGLE_DRIVE_FOLDER_ID", DEFAULT_FOLDER_ID)
+
+    try:
+        service = _drive_service()
+        metadata = (
+            service.files()
+            .get(fileId=file_id, fields="id, name, parents", supportsAllDrives=True)
+            .execute()
+        )
+        if target_folder_id not in (metadata.get("parents") or []):
+            raise DriveExportError("file is not in the configured shared drive folder")
+
+        raw = service.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
+    except (HttpError, GoogleAuthError) as exc:
+        raise DriveExportError(f"failed to fetch file from Google Drive: {exc}") from exc
+
+    try:
+        data = json.loads(raw.decode("utf-8", errors="surrogatepass"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DriveExportError(f"file content is not valid JSON: {exc}") from exc
+
+    return {"id": metadata["id"], "name": metadata["name"], "data": data}
