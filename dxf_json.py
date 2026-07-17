@@ -182,10 +182,11 @@ def _entity_json(
     entity: DXFEntity,
     restore_name: Callable[[str, str], str] = lambda value, _location: value,
     restore_text: Callable[[str, str], str] = lambda value, _location: value,
+    location: str = "entities[]",
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
         "type": entity.dxftype(),
-        "layer": restore_name(entity.dxf.get("layer", "0"), "entities[].layer"),
+        "layer": restore_name(entity.dxf.get("layer", "0"), f"{location}.layer"),
     }
     dxf = entity.dxf
 
@@ -210,12 +211,21 @@ def _entity_json(
         )
     elif entity.dxftype() in {"TEXT", "MTEXT"}:
         raw_text = entity.plain_text() if entity.dxftype() == "MTEXT" else dxf.text
-        item["text"] = restore_text(raw_text, "entities[].text")
+        item["text"] = restore_text(raw_text, f"{location}.text")
         item["insert"] = _point(dxf.insert)
     elif entity.dxftype() == "INSERT":
-        item.update(block=restore_name(dxf.name, "entities[].block"), insert=_point(dxf.insert))
+        item.update(
+            block=restore_name(dxf.name, f"{location}.block"),
+            insert=_point(dxf.insert),
+            rotation=_number(dxf.get("rotation", 0)),
+            scale=[
+                _number(dxf.get("xscale", 1)),
+                _number(dxf.get("yscale", 1)),
+                _number(dxf.get("zscale", 1)),
+            ],
+        )
     elif entity.dxftype() == "DIMENSION":
-        item["text"] = restore_text(dxf.get("text", ""), "entities[].text")
+        item["text"] = restore_text(dxf.get("text", ""), f"{location}.text")
 
     return item
 
@@ -553,6 +563,15 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
                 "name": restore_name(block.name, "blocks[].name"),
                 "entity_count": len(block_entities),
                 "entity_counts": _entity_counts(block_entities),
+                "entities": [
+                    _entity_json(
+                        entity,
+                        restore_name,
+                        restore_text,
+                        location="blocks[].entities[]",
+                    )
+                    for entity in block_entities
+                ],
                 "bbox": _bounding_box_json(block_entities),
             }
         )

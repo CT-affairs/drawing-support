@@ -45,6 +45,14 @@ class DxfJsonTests(unittest.TestCase):
                     "name": "DUCT_BLOCK",
                     "entity_count": 1,
                     "entity_counts": {"LINE": 1},
+                    "entities": [
+                        {
+                            "type": "LINE",
+                            "layer": "BLOCK",
+                            "start": [0, 0, 0],
+                            "end": [20, 0, 0],
+                        }
+                    ],
                     "bbox": {
                         "min": [0, 0, 0],
                         "max": [20, 0, 0],
@@ -93,6 +101,19 @@ class DxfJsonTests(unittest.TestCase):
         result = parse_dxf(stream.getvalue().encode("utf-8"))
 
         outer_block = next(item for item in result["blocks"] if item["name"] == "OUTER")
+        self.assertEqual(
+            outer_block["entities"],
+            [
+                {
+                    "type": "INSERT",
+                    "layer": "0",
+                    "block": "INNER",
+                    "insert": [10, 20, 0],
+                    "rotation": 0,
+                    "scale": [2, 3, 1],
+                }
+            ],
+        )
         self.assertEqual(
             outer_block["bbox"],
             {
@@ -189,9 +210,15 @@ class DxfJsonTests(unittest.TestCase):
         self.assertEqual(result["inserts"][0]["layer"], "製図")
         self.assertEqual(result["inserts"][0]["block"], "配管")
         diagnostics = result["diagnostics"]["name_decoding"]
-        self.assertEqual(diagnostics["restored_occurrence_count"], 6)
+        self.assertEqual(diagnostics["restored_occurrence_count"], 7)
         self.assertEqual(len(diagnostics["mappings"]), 2)
         self.assertGreaterEqual(diagnostics["mappings"][0]["confidence"], 0.8)
+        layer_mapping = next(
+            item
+            for item in diagnostics["mappings"]
+            if "blocks[].entities[].layer" in item["locations"]
+        )
+        self.assertIn("blocks[].entities[].layer", layer_mapping["locations"])
 
 
 if __name__ == "__main__":
