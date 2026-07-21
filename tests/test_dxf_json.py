@@ -30,7 +30,7 @@ class DxfJsonTests(unittest.TestCase):
     def test_parse_returns_structured_entities(self):
         result = parse_dxf(self.make_dxf())
 
-        self.assertEqual(result["schema_version"], "1.0")
+        self.assertEqual(result["schema_version"], "1.1")
         self.assertEqual(result["units"], 4)
         self.assertEqual(result["entity_counts"], {"INSERT": 1, "LINE": 1, "TEXT": 1})
         self.assertEqual(result["layers"], ["DUCT", "INSERT", "NOTE", "PAPER"])
@@ -64,6 +64,12 @@ class DxfJsonTests(unittest.TestCase):
         )
         self.assertEqual(result["inserts"][0]["block"], "DUCT_BLOCK")
         self.assertEqual(result["inserts"][0]["space"], "Model")
+        self.assertTrue(result["inserts"][0]["id"].startswith("insert:"))
+        self.assertEqual(result["inserts"][0]["classification"]["role"], "unknown")
+        self.assertEqual(
+            result["diagnostics"]["object_classification"]["role_counts"],
+            {"unknown": 1},
+        )
         self.assertGreater(result["diagnostics"]["file_size_bytes"], 0)
         self.assertEqual(result["diagnostics"]["text_encoding"], "cp1252")
         self.assertEqual(result["diagnostics"]["encoding"]["selected_encoding"], "cp1252")
@@ -77,6 +83,57 @@ class DxfJsonTests(unittest.TestCase):
     def test_invalid_file_is_rejected(self):
         with self.assertRaises(DxfParseError):
             parse_dxf(b"not a dxf")
+
+    def test_insert_classification_is_stored_on_insert_instances(self):
+        document = ezdxf.new("R2013")
+        document.header["$INSUNITS"] = 4
+        title = document.blocks.new("TITLE_FRAME")
+        title.add_line((0, 0), (10, 0), dxfattribs={"layer": "0"})
+        duct = document.blocks.new("DUCT_SHAPE")
+        duct.add_line((0, 0), (10, 0), dxfattribs={"layer": "duct"})
+        unknown = document.blocks.new("UNKNOWN_SHAPE")
+        unknown.add_line((0, 0), (10, 0), dxfattribs={"layer": "0"})
+        modelspace = document.modelspace()
+        modelspace.add_blockref("TITLE_FRAME", (0, 0))
+        modelspace.add_blockref("DUCT_SHAPE", (100, 0))
+        modelspace.add_blockref("UNKNOWN_SHAPE", (200, 0))
+        stream = io.StringIO()
+        document.write(stream)
+
+        result = parse_dxf(stream.getvalue().encode("utf-8"))
+        by_block = {item["block"]: item for item in result["inserts"]}
+
+        self.assertEqual(by_block["TITLE_FRAME"]["classification"]["role"], "meta")
+        self.assertEqual(by_block["TITLE_FRAME"]["classification"]["type"], "title_frame")
+        self.assertEqual(by_block["DUCT_SHAPE"]["classification"]["role"], "target")
+        self.assertEqual(
+            by_block["UNKNOWN_SHAPE"]["classification"]["role"],
+            "unknown",
+        )
+        self.assertEqual(len({item["id"] for item in result["inserts"]}), 3)
+        self.assertEqual(
+            result["diagnostics"]["object_classification"]["role_counts"],
+            {"meta": 1, "target": 1, "unknown": 1},
+        )
+
+    def test_large_sheet_like_block_is_meta_candidate(self):
+        document = ezdxf.new("R2013")
+        document.header["$INSUNITS"] = 4
+        block = document.blocks.new("NORMAL_LAYER_FRAME")
+        block.add_line((0, 0), (9000, 0), dxfattribs={"layer": "通常"})
+        block.add_line((9000, 0), (9000, 6000), dxfattribs={"layer": "通常"})
+        block.add_line((9000, 6000), (0, 6000), dxfattribs={"layer": "通常"})
+        block.add_line((0, 6000), (0, 0), dxfattribs={"layer": "通常"})
+        document.modelspace().add_blockref("NORMAL_LAYER_FRAME", (0, 0))
+        stream = io.StringIO()
+        document.write(stream)
+
+        result = parse_dxf(stream.getvalue().encode("utf-8"))
+
+        classification = result["inserts"][0]["classification"]
+        self.assertEqual(classification["role"], "meta")
+        self.assertEqual(classification["type"], "title_frame_candidate")
+        self.assertIn("large_sheet_like_bbox", classification["evidence"])
 
     def test_block_bbox_is_none_when_block_has_no_geometry(self):
         document = ezdxf.new("R2013")

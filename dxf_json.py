@@ -247,13 +247,120 @@ def _bounding_box_json(entities: list[DXFEntity]) -> dict[str, list[int | float]
     }
 
 
+_META_NAME_TOKENS = (
+    "title_frame",
+    "title frame",
+    "titleblock",
+    "title block",
+    "drawing_border",
+    "drawing border",
+    "border",
+    "図面枠",
+    "表題欄",
+)
+_TARGET_LAYER_TOKENS = (
+    "duct",
+    "ductwork",
+    "ダクト",
+    "排気",
+    "給気",
+    "換気",
+    "排煙",
+    "空調",
+)
+
+
+def _contains_token(values: list[str], tokens: tuple[str, ...]) -> bool:
+    text = " ".join(values).casefold()
+    return any(token.casefold() in text for token in tokens)
+
+
+def _classification_for_insert(
+    insert: dict[str, Any],
+    block: dict[str, Any] | None,
+    units: int | float | None,
+) -> dict[str, Any]:
+    """Classify an INSERT instance without removing or rewriting source data."""
+    if block is None:
+        return {
+            "role": "unknown",
+            "type": None,
+            "confidence": 0.0,
+            "evidence": ["missing_block_definition"],
+        }
+
+    block_layers = sorted(
+        {
+            entity.get("layer", "")
+            for entity in block.get("entities", [])
+            if entity.get("layer")
+        }
+    )
+    block_name = str(block.get("name", ""))
+    evidence: list[str] = []
+
+    if _contains_token([block_name], _META_NAME_TOKENS):
+        evidence.append("meta_name_token")
+    if _contains_token(block_layers, _META_NAME_TOKENS):
+        evidence.append("meta_layer_token")
+
+    if evidence:
+        return {
+            "role": "meta",
+            "type": "title_frame",
+            "confidence": 0.98,
+            "evidence": evidence,
+        }
+
+    if _contains_token(block_layers, _TARGET_LAYER_TOKENS):
+        return {
+            "role": "target",
+            "type": "manufacturing_geometry_candidate",
+            "confidence": 0.9,
+            "evidence": ["target_layer_token"],
+        }
+
+    bbox = block.get("bbox")
+    scale = insert.get("scale", [1, 1, 1])
+    if bbox and units == 4 and len(scale) >= 2:
+        local_size = bbox.get("size", [0, 0, 0])
+        world_width = abs(float(local_size[0]) * float(scale[0]))
+        world_height = abs(float(local_size[1]) * float(scale[1]))
+        world_area = world_width * world_height
+        entity_types = [entity.get("type") for entity in block.get("entities", [])]
+        if (
+            world_area >= 20_000_000
+            and max(world_width, world_height) >= 5_000
+            and len(entity_types) <= 8
+            and all(entity_type in {"LINE", "LWPOLYLINE", "POLYLINE"} for entity_type in entity_types)
+        ):
+            return {
+                "role": "meta",
+                "type": "title_frame_candidate",
+                "confidence": 0.84,
+                "evidence": ["large_sheet_like_bbox"],
+            }
+
+    return {
+        "role": "unknown",
+        "type": None,
+        "confidence": 0.45,
+        "evidence": ["insufficient_context"],
+    }
+
+
 def _insert_json(
     entity: DXFEntity,
     space: str,
     restore_name: Callable[[str, str], str] = lambda value, _location: value,
+    ordinal: int = 0,
 ) -> dict[str, Any]:
     dxf = entity.dxf
+    handle = getattr(dxf, "handle", None)
+    insert_id = f"insert:{handle}" if handle else f"insert:{space}:{ordinal}"
     return {
+        "id": insert_id,
+        "handle": handle,
         "space": space,
         "block": restore_name(dxf.name, "inserts[].block"),
         "layer": restore_name(dxf.get("layer", "0"), "inserts[].layer"),
@@ -527,12 +634,14 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
     space_summaries = []
     layout_entities: dict[str, list[DXFEntity]] = {}
     inserts = []
+    insert_ordinal = 0
     for layout in document.layouts:
         layout_entities[layout.name] = list(layout)
         entities_in_layout = layout_entities[layout.name]
         for entity in entities_in_layout:
             if entity.dxftype() == "INSERT":
-                inserts.append(_insert_json(entity, layout.name, restore_name))
+                insert_ordinal += 1
+                inserts.append(_insert_json(entity, layout.name, restore_name, insert_ordinal))
         space_summaries.append(
             {
                 "name": layout.name,
@@ -576,6 +685,17 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
             }
         )
     blocks.sort(key=lambda item: item["name"])
+
+    blocks_by_name = {block["name"]: block for block in blocks}
+    for insert in inserts:
+        insert["classification"] = _classification_for_insert(
+            insert,
+            blocks_by_name.get(insert["block"]),
+            _number(document.header.get("$INSUNITS")),
+        )
+    classification_counts = Counter(
+        insert["classification"]["role"] for insert in inserts
+    )
 
     if audit is None:
         audit = document.audit()
@@ -623,11 +743,16 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
                 "unchanged_occurrence_count": inspected_text_count - restored_text_count,
                 "mappings": normalized_text_decoding,
             },
+            "object_classification": {
+                "strategy": "insert_instance_role_v1",
+                "role_counts": dict(sorted(classification_counts.items())),
+                "roles": ["target", "meta", "unknown"],
+            },
         }
     )
 
     result = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "dxf_version": document.dxfversion,
         "units": _number(document.header.get("$INSUNITS")),
         "layers": layers,
