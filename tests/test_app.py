@@ -6,6 +6,7 @@ import ezdxf
 
 from app import app
 from drive_export import DriveExportError
+from firestore_operations import OperationStoreError
 
 
 class AppTests(unittest.TestCase):
@@ -35,6 +36,49 @@ class AppTests(unittest.TestCase):
         dashboard.close()
         dxf_page.close()
         stylesheet.close()
+
+    def test_operation_master_page_is_available(self):
+        page = self.client.get("/liff3/operation-master.html")
+        script = self.client.get("/liff3/js/operation-master.js")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("オペレーションID", page.text)
+        self.assertEqual(script.status_code, 200)
+        self.assertIn("/api/v1/operations", script.text)
+        page.close()
+        script.close()
+
+    def test_operations_list_returns_master_data(self):
+        operations = [{"operation_id": "OP001", "name": "曲率Rを抽出", "active": True}]
+        with patch("app.list_operations", return_value=operations):
+            response = self.client.get("/api/v1/operations")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {"operations": operations})
+
+    def test_operation_save_and_delete(self):
+        saved = {"operation_id": "OP001", "name": "曲率Rを抽出", "instruction": "R部材を抽出"}
+        with patch("app.save_operation", return_value=saved) as mock_save:
+            response = self.client.put(
+                "/api/v1/operations/OP001",
+                json={"name": "曲率Rを抽出", "instruction": "R部材を抽出", "actions": []},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, saved)
+        mock_save.assert_called_once()
+
+        with patch("app.delete_operation") as mock_delete:
+            response = self.client.delete("/api/v1/operations/OP001")
+        self.assertEqual(response.status_code, 204)
+        mock_delete.assert_called_once_with("OP001")
+
+    def test_operation_save_rejects_invalid_payload(self):
+        with patch("app.save_operation", side_effect=OperationStoreError("name and instruction are required")):
+            response = self.client.put("/api/v1/operations/OP001", json={"name": ""})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json["error"]["code"], "invalid_operation")
 
     def test_drive_json_viewer_page_is_available(self):
         page = self.client.get("/liff3/drive-json-viewer.html")

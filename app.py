@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from dxf_json import DxfParseError, parse_dxf
 from drive_export import DriveExportError, get_json_file, list_json_files, save_json_to_drive, update_json_file
+from firestore_operations import OperationStoreError, delete_operation, list_operations, save_operation
 
 
 app = Flask(__name__)
@@ -27,7 +28,7 @@ def add_api_cors_headers(response):
         if origin in API_CORS_ORIGINS:
             response.headers["Access-Control-Allow-Origin"] = origin
 
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         response.headers["Vary"] = "Origin"
     return response
@@ -168,6 +169,37 @@ def update_drive_file_unit_endpoint(file_id):
         "web_view_link": updated.get("webViewLink"),
         "unit": unit,
     }), 200
+
+
+@app.get("/api/v1/operations")
+def list_operations_endpoint():
+    try:
+        return jsonify({"operations": list_operations()}), 200
+    except OperationStoreError as exc:
+        return jsonify({"error": {"code": "operation_store_failed", "message": str(exc)}}), 503
+
+
+@app.put("/api/v1/operations/<operation_id>")
+def save_operation_endpoint(operation_id):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": {"code": "invalid_request", "message": "JSON object is required"}}), 400
+    try:
+        operation = save_operation(operation_id, payload)
+    except OperationStoreError as exc:
+        status = 400 if "must match" in str(exc) or "required" in str(exc) or "must be a list" in str(exc) else 503
+        return jsonify({"error": {"code": "invalid_operation" if status == 400 else "operation_store_failed", "message": str(exc)}}), status
+    return jsonify(operation), 200
+
+
+@app.delete("/api/v1/operations/<operation_id>")
+def delete_operation_endpoint(operation_id):
+    try:
+        delete_operation(operation_id)
+    except OperationStoreError as exc:
+        status = 400 if "must match" in str(exc) else 503
+        return jsonify({"error": {"code": "invalid_operation" if status == 400 else "operation_store_failed", "message": str(exc)}}), status
+    return "", 204
 
 
 @app.errorhandler(413)

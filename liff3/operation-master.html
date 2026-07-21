@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>オペレーションID管理</title>
+  <link rel="stylesheet" href="/liff3/drawing-support.css">
+</head>
+<body>
+<div class="app-shell">
+  <nav class="somu-sidebar" aria-label="製図支援メニュー">
+    <div class="somu-sidebar-header"><h2>Clean-techno</h2></div>
+    <ul class="somu-nav-links">
+      <li><span class="somu-nav-header">製図支援</span></li>
+      <li><a class="somu-nav-item" href="/liff3/drawing-support.html">製図ダッシュボード</a></li>
+      <li><a class="somu-nav-item" href="/liff3/dxf-json.html">DXF_JSON化</a></li>
+      <li><a class="somu-nav-item" href="/liff3/drive-json-viewer.html">Drive_JSON閲覧</a></li>
+      <li><a class="somu-nav-item active" href="/liff3/operation-master.html">オペレーションID</a></li>
+    </ul>
+  </nav>
+  <div class="app-main">
+    <header class="top-bar"><h1>オペレーションID</h1></header>
+    <main class="app-body">
+      <div class="page-inner operation-master-page">
+        <section class="card">
+          <p class="eyebrow">OPERATION MASTER</p>
+          <h2>オペレーションID管理</h2>
+          <p class="muted">Tfasの「LLMnote: OP001」などから参照する、基本要望のマスタです。</p>
+          <div class="operation-form-grid">
+            <label>オペレーションID<input id="operation-id" placeholder="OP001" pattern="OP[0-9]{3,}"></label>
+            <label>名称<input id="operation-name" placeholder="曲率Rを抽出"></label>
+            <label class="operation-form-wide">指示内容<textarea id="operation-instruction" rows="3" placeholder="曲率Rのある部材を抽出し、半径を一覧化する"></textarea></label>
+            <label>アクション（カンマ区切り）<input id="operation-actions" placeholder="extract_radius,classify_target"></label>
+            <label>説明（任意）<input id="operation-description"></label>
+            <label class="operation-checkbox"><input id="operation-active" type="checkbox" checked> 有効</label>
+          </div>
+          <div class="action-row">
+            <button class="btn-primary" id="save-operation" type="button">保存</button>
+            <button class="btn-secondary" id="clear-operation" type="button">入力をクリア</button>
+          </div>
+          <div class="status-message" id="operation-status" role="status" aria-live="polite"></div>
+        </section>
+        <section class="card">
+          <div class="operation-list-header"><h2>登録済みオペレーション</h2><button class="btn-secondary" id="reload-operations" type="button">再読み込み</button></div>
+          <div id="operation-list" class="operation-list"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+<script>
+  window.DRAWING_SUPPORT_API_BASE = window.DRAWING_SUPPORT_API_BASE || "https://drawing-support-1088643883290.asia-northeast1.run.app";
+</script>
+<script src="/liff3/js/operation-master.js"></script>
+</body>
+</html>

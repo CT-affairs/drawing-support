@@ -378,3 +378,6 @@ inserts[].classificationへrole/type/confidence/evidenceを付与
 - 根拠が不足する場合は`unknown`
 
 INSERT自身のレイヤーは強い判定材料にしない。Tfas出力のように、INSERT全体が図面枠レイヤーへ置かれ、ブロック内部のレイヤーが実形状を表すケースがあるためである。分類結果は`diagnostics.object_classification`にも件数と戦略を記録する。
+## Downstream process correction
+
+The downstream manufacturing flow is `Tfas DXF -> drawing-support normalization -> JW-CAD 2D -> ALPHACAM CAM -> NC router -> field processing`. The JSON is an intermediate representation and must eventually be used to regenerate a cleaned DXF for JW-CAD. NCVC is not used in this project.

@@ -141,3 +141,26 @@ Cloud Buildを構成するときは、最低限次を確認します。
 ### Unit metadata and override
 
 The JSON output uses `unit` as the normalized unit name, `units` as the DXF unit code, and `units_source` as `dxf_header`, `default`, or `user_override`. When the DXF does not declare units, `mm` is used as the default and the source is recorded as `default`. `POST /api/v1/drive/file/{file_id}/unit` updates an existing Drive JSON file in place. This operation changes unit metadata only; it does not rescale coordinates. The Drive JSON viewer exposes this operation from the JSON overview modal.
+
+## Operation master / Firestore contract
+
+The operation master is stored in the new Firestore collection `drawing_operations`. The document ID is the operation ID, so the manually created first document is `OP001`. The drawing-support backend accesses this collection; the browser does not access Firestore directly.
+
+Recommended sample document:
+
+```json
+{
+  "operation_id": "OP001",
+  "name": "曲率Rを抽出",
+  "instruction": "曲率Rのある部材を抽出し、半径を一覧化する",
+  "actions": ["extract_radius", "classify_target"],
+  "active": true,
+  "version": 1,
+  "description": "",
+  "updated_at": "server timestamp"
+}
+```
+
+`operation_id`, `name`, `instruction`, `actions`, `active`, and `version` are managed fields. `description` is optional. `updated_at` is written by the backend as a Firestore server timestamp. The `/liff3/operation-master.html` page provides simple list, create/update, and delete operations through `GET /api/v1/operations`, `PUT /api/v1/operations/{operation_id}`, and `DELETE /api/v1/operations/{operation_id}`. IDs must be uppercase `OP` followed by at least three digits, such as `OP001`.
+
+The Cloud Run service account needs Firestore access to the project containing this collection. No source-folder data file is required; application default credentials and the deployed service account are the connection mechanism.

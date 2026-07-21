@@ -260,4 +260,13 @@ Tfas → IFC → BIM／Rebro → 構造化データ → AI → DXF → JW-CAD
 まずは、Tfas→DXF→JW-CADの既存フローに`ezdxf`を追加し、DXFを正しく読み取り、構造化し、簡単な候補図面を再出力できるかを確認する。
 
 AIは、図面を直接生成する唯一の判断者ではなく、複数候補の生成・比較・ルールチェック・修正案の提示を担当する。最終的な図面生成と寸法計算は、検証可能なプログラム処理として実装する。
+## Manufacturing downstream flow (current)
 
+The practical downstream process is:
+
+```text
+Tfas DXF -> drawing-support analysis/normalization -> JW-CAD 2D drawing
+          -> ALPHACAM CAM -> NC router material processing -> field processing
+```
+
+The current project focuses first on reducing the JW-CAD preparation work. The analysis JSON is an intermediate representation; JW-CAD does not consume the JSON directly. The future output step is to regenerate a cleaned DXF from the reviewed JSON, then pass that DXF to JW-CAD and onward to ALPHACAM. NCVC is not part of this process.
