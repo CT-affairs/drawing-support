@@ -16,13 +16,14 @@
     if (!items.length) { list.textContent = 'No operations registered.'; return; }
     items.forEach((item) => {
       const card = document.createElement('article'); card.className = 'operation-item';
-      const heading = document.createElement('h3'); heading.textContent = `${item.operation_id} / ${item.name}`;
+      const heading = document.createElement('h3');
+      heading.append(`${item.operation_id} / ${item.name}`);
       const instruction = document.createElement('p'); instruction.textContent = item.instruction || '';
       const meta = document.createElement('p'); meta.className = 'operation-meta'; meta.textContent = `actions: ${(item.actions || []).join(', ') || '-'} / ${item.active === false ? 'inactive' : 'active'} / version: ${item.version || 1}`;
-      const actions = document.createElement('div'); actions.className = 'action-row';
+      const actions = document.createElement('span'); actions.className = 'operation-item-actions';
       const edit = document.createElement('button'); edit.className = 'btn-secondary'; edit.type = 'button'; edit.textContent = 'Edit'; edit.addEventListener('click', () => fillForm(item));
       const remove = document.createElement('button'); remove.className = 'btn-secondary'; remove.type = 'button'; remove.textContent = 'Delete'; remove.addEventListener('click', () => removeOperation(item.operation_id));
-      actions.append(edit, remove); card.append(heading, instruction, meta, actions); list.appendChild(card);
+      actions.append(edit, remove); heading.appendChild(actions); card.append(heading, instruction, meta); list.appendChild(card);
     });
   }
 

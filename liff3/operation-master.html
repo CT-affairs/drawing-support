@@ -8,20 +8,25 @@
 </head>
 <body>
 <div class="app-shell">
-  <nav class="somu-sidebar" aria-label="製図支援メニュー">
+  <nav class="somu-sidebar" aria-label="製図サポートメニュー">
     <div class="somu-sidebar-header"><h2>Clean-techno</h2></div>
     <ul class="somu-nav-links">
-      <li><span class="somu-nav-header">製図支援</span></li>
-      <li><a class="somu-nav-item" href="/liff3/drawing-support.html">製図ダッシュボード</a></li>
-      <li><a class="somu-nav-item" href="/liff3/dxf-json.html">DXF_JSON化</a></li>
-      <li><a class="somu-nav-item" href="/liff3/drive-json-viewer.html">Drive_JSON閲覧</a></li>
       <li><a class="somu-nav-item active" href="/liff3/operation-master.html">オペレーションID</a></li>
+      <li><span class="somu-nav-header">製図サポート</span></li>
+      <li><a class="somu-nav-item" href="/liff3/drawing-support.html">製図ダッシュボード</a></li>
+      <li><a class="somu-nav-item" href="/liff3/dxf-json.html">DXF JSON化</a></li>
+      <li><a class="somu-nav-item" href="/liff3/drive-json-viewer.html">Drive JSON閲覧</a></li>
+      <li><span class="somu-nav-header">その他リンク</span></li>
+      <li><a class="somu-nav-item" href="https://clean-techno.com/liff/admin.html">日報ツール</a></li>
+      <li><a class="somu-nav-item" href="/liff2/purchase-order-dashboard.html">発注ツール</a></li>
     </ul>
+    <div class="somu-sidebar-footer"><div id="somu-user-info">未ログイン</div></div>
   </nav>
   <div class="app-main">
     <header class="top-bar"><h1>オペレーションID</h1></header>
     <main class="app-body">
       <div class="page-inner operation-master-page">
+        <div class="operation-editor-column">
         <section class="card">
           <p class="eyebrow">OPERATION MASTER</p>
           <h2>オペレーションID管理</h2>
@@ -40,10 +45,13 @@
           </div>
           <div class="status-message" id="operation-status" role="status" aria-live="polite"></div>
         </section>
+        </div>
+        <div class="operation-list-column">
         <section class="card">
           <div class="operation-list-header"><h2>登録済みオペレーション</h2><button class="btn-secondary" id="reload-operations" type="button">再読み込み</button></div>
           <div id="operation-list" class="operation-list"></div>
         </section>
+        </div>
       </div>
     </main>
   </div>
