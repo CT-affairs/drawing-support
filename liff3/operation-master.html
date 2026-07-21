@@ -35,8 +35,14 @@
             <label>オペレーションID<input id="operation-id" placeholder="OP001" pattern="OP[0-9]{3,}"></label>
             <label>名称<input id="operation-name" placeholder="曲率Rを抽出"></label>
             <label class="operation-form-wide">指示内容<textarea id="operation-instruction" rows="3" placeholder="曲率Rのある部材を抽出し、半径を一覧化する"></textarea></label>
-            <label>アクション（カンマ区切り）<input id="operation-actions" placeholder="extract_radius,classify_target"></label>
-            <label>説明（任意）<input id="operation-description"></label>
+            <label>判定方法
+              <select id="operation-action">
+                <option value="">選択してください</option>
+                <option value="llm">LLM時に渡す内容</option>
+                <option value="python">Pythonで判定するための値</option>
+                <option value="visual">目視での判定項目</option>
+              </select>
+            </label>
             <label class="operation-checkbox"><input id="operation-active" type="checkbox" checked> 有効</label>
           </div>
           <div class="action-row">

@@ -61,7 +61,7 @@ class AppTests(unittest.TestCase):
         with patch("app.save_operation", return_value=saved) as mock_save:
             response = self.client.put(
                 "/api/v1/operations/OP001",
-                json={"name": "曲率Rを抽出", "instruction": "R部材を抽出", "actions": []},
+                json={"name": "曲率Rを抽出", "instruction": "R部材を抽出", "actions": ["python"]},
             )
 
         self.assertEqual(response.status_code, 200)

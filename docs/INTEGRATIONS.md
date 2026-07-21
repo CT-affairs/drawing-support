@@ -153,7 +153,7 @@ Recommended sample document:
   "operation_id": "OP001",
   "name": "曲率Rを抽出",
   "instruction": "曲率Rのある部材を抽出し、半径を一覧化する",
-  "actions": ["extract_radius", "classify_target"],
+  "actions": ["python"],
   "active": true,
   "version": 1,
   "description": "",
@@ -161,6 +161,6 @@ Recommended sample document:
 }
 ```
 
-`operation_id`, `name`, `instruction`, `actions`, `active`, and `version` are managed fields. `description` is optional. `updated_at` is written by the backend as a Firestore server timestamp. The `/liff3/operation-master.html` page provides simple list, create/update, and delete operations through `GET /api/v1/operations`, `PUT /api/v1/operations/{operation_id}`, and `DELETE /api/v1/operations/{operation_id}`. IDs must be uppercase `OP` followed by at least three digits, such as `OP001`.
+`operation_id`, `name`, `instruction`, `actions`, `active`, and `version` are managed fields. `updated_at` is written by the backend as a Firestore server timestamp. The current UI selects one `actions` value from `llm` (LLM時に渡す内容), `python` (Pythonで判定するための値), or `visual` (目視での判定項目), and stores it as a one-element array. The data shape remains an array so a future UI can support multiple values. The `/liff3/operation-master.html` page provides simple list, create/update, and delete operations through `GET /api/v1/operations`, `PUT /api/v1/operations/{operation_id}`, and `DELETE /api/v1/operations/{operation_id}`. IDs must be uppercase `OP` followed by at least three digits, such as `OP001`.
 
 The Cloud Run service account needs Firestore access to the project containing this collection. No source-folder data file is required; application default credentials and the deployed service account are the connection mechanism. The backend image must include `firestore_operations.py` alongside `app.py`; `Dockerfile` explicitly copies this module.
