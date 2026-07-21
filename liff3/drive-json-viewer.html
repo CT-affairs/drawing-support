@@ -24,7 +24,7 @@
   </nav>
   <div class="app-main">
     <header class="top-bar"><h1>共有ドライブJSON閲覧</h1></header>
-    <main class="app-body app-body-split">
+    <main class="app-body app-body-split drive-json-layout">
       <div class="page-inner page-inner-split">
         <div class="dxf-json-controls">
           <section class="card">
@@ -39,6 +39,11 @@
             </div>
             <div class="status-message" id="list-status-message" role="status" aria-live="polite"></div>
             <ul class="drive-file-list" id="file-list"></ul>
+          </section>
+          <section class="card analysis-overview" id="analysis-overview" hidden>
+            <p class="eyebrow">ANALYSIS OVERVIEW</p>
+            <h2>JSON概要</h2>
+            <div id="analysis-overview-content"></div>
           </section>
         </div>
         <section class="card json-panel" id="json-panel">
@@ -75,6 +80,8 @@
   const expandAllButton = document.getElementById('expand-all-button');
   const collapseAllButton = document.getElementById('collapse-all-button');
   const toggleRawButton = document.getElementById('toggle-raw-button');
+  const analysisOverview = document.getElementById('analysis-overview');
+  const analysisOverviewContent = document.getElementById('analysis-overview-content');
   const treeButtons = [expandAllButton, collapseAllButton, toggleRawButton];
 
   JsonTree.attachToolbar({ tree: jsonTree, output: jsonOutput, expandAllButton, collapseAllButton, toggleRawButton });
@@ -93,6 +100,104 @@
     if (!iso) return '';
     const date = new Date(iso);
     return Number.isNaN(date.getTime()) ? iso : date.toLocaleString('ja-JP');
+  }
+
+  function numberText(value) {
+    return Number.isFinite(Number(value)) ? Number(value).toLocaleString('ja-JP') : '—';
+  }
+
+  function appendOverviewGroup(parent, title, rows) {
+    const group = document.createElement('section');
+    group.className = 'analysis-overview-group';
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    group.appendChild(heading);
+    const list = document.createElement('dl');
+    list.className = 'analysis-overview-list';
+    rows.forEach(([label, value, tone]) => {
+      const term = document.createElement('dt');
+      term.textContent = label;
+      const detail = document.createElement('dd');
+      detail.textContent = value;
+      if (tone) detail.className = `analysis-status-${tone}`;
+      list.appendChild(term);
+      list.appendChild(detail);
+    });
+    group.appendChild(list);
+    parent.appendChild(group);
+  }
+
+  function renderAnalysisOverview(data, fileName) {
+    analysisOverviewContent.replaceChildren();
+    const inserts = Array.isArray(data?.inserts) ? data.inserts : [];
+    const blocks = Array.isArray(data?.blocks) ? data.blocks : [];
+    const entities = Array.isArray(data?.entities) ? data.entities : [];
+    const layers = Array.isArray(data?.layers) ? data.layers : [];
+    const roleCounts = { target: 0, meta: 0, unknown: 0 };
+    let classificationAvailable = false;
+    inserts.forEach((item) => {
+      const role = item?.classification?.role;
+      if (Object.prototype.hasOwnProperty.call(roleCounts, role)) {
+        roleCounts[role] += 1;
+        classificationAvailable = true;
+      }
+    });
+    const diagnosticCounts = data?.diagnostics?.object_classification?.role_counts;
+    if (!classificationAvailable && diagnosticCounts && typeof diagnosticCounts === 'object') {
+      Object.keys(roleCounts).forEach((role) => {
+        roleCounts[role] = Number(diagnosticCounts[role]) || 0;
+      });
+      classificationAvailable = true;
+    }
+
+    const bboxCount = blocks.filter((block) => block && block.bbox).length;
+    const worldBboxCount = inserts.filter((item) => item && item.world_bbox).length;
+    const diagnostics = data?.diagnostics || {};
+    const encoding = diagnostics.encoding || {};
+    const nameDecoding = diagnostics.name_decoding || {};
+    const textDecoding = diagnostics.text_decoding || {};
+    const unicode = diagnostics.unicode_normalization || {};
+
+    const fileHeading = document.createElement('p');
+    fileHeading.className = 'analysis-overview-file';
+    fileHeading.textContent = fileName || 'JSON';
+    analysisOverviewContent.appendChild(fileHeading);
+
+    appendOverviewGroup(analysisOverviewContent, '分類状況', classificationAvailable
+      ? [
+          ['メタObject', `${numberText(roleCounts.meta)}件`, 'meta'],
+          ['対象Object', `${numberText(roleCounts.target)}件`, 'target'],
+          ['判定不能', `${numberText(roleCounts.unknown)}件`, roleCounts.unknown ? 'unknown' : 'ok'],
+          ['INSERT合計', `${numberText(inserts.length)}件`],
+          ['分類単位', 'INSERT配置単位'],
+        ]
+      : [['分類情報', 'このJSONには分類結果がありません', 'unknown']]);
+
+    appendOverviewGroup(analysisOverviewContent, '構造の把握', [
+      ['DXFバージョン', data?.dxf_version || '不明'],
+      ['単位', data?.units === undefined || data?.units === null ? '不明' : String(data.units)],
+      ['レイヤー', `${numberText(layers.length)}件`],
+      ['Model Spaceエンティティ', `${numberText(entities.length)}件`],
+      ['ブロック定義', `${numberText(blocks.length)}件`],
+      ['ブロック内部エンティティ', `${numberText(blocks.reduce((sum, block) => sum + (Number(block?.entity_count) || 0), 0))}件`],
+    ]);
+
+    appendOverviewGroup(analysisOverviewContent, '形状・文字の把握', [
+      ['ローカルbbox取得済み', `${numberText(bboxCount)} / ${numberText(blocks.length)}ブロック`, bboxCount === blocks.length && blocks.length ? 'ok' : 'unknown'],
+      ['ワールドbbox取得済み', worldBboxCount ? `${numberText(worldBboxCount)} / ${numberText(inserts.length)}件` : '未実装・未取得', worldBboxCount ? 'ok' : 'unknown'],
+      ['名称復元', `${numberText(nameDecoding.restored_occurrence_count)} / ${numberText(nameDecoding.inspected_occurrence_count)}件`],
+      ['TEXT復元', `${numberText(textDecoding.restored_occurrence_count)} / ${numberText(textDecoding.inspected_occurrence_count)}件`],
+      ['JSON UTF-8', unicode.strict_utf8 === true ? '厳密UTF-8' : '確認要', unicode.strict_utf8 === true ? 'ok' : 'unknown'],
+      ['解析文字コード', encoding.selected_encoding || '不明'],
+    ]);
+
+    const note = document.createElement('p');
+    note.className = 'analysis-overview-note';
+    note.textContent = classificationAvailable
+      ? '対象Objectだけが在庫突合・製作候補の一次対象です。判定不能は確認待ちとして残しています。'
+      : '旧形式のJSON、または分類前のJSONです。分類結果はありません。';
+    analysisOverviewContent.appendChild(note);
+    analysisOverview.hidden = false;
   }
 
   function renderFileList(files) {
@@ -148,6 +253,8 @@
     if (buttonEl) buttonEl.classList.add('active');
     listStatusMessage.textContent = 'ファイルを読み込み中…';
     listStatusMessage.className = 'status-message';
+    analysisOverview.hidden = true;
+    analysisOverviewContent.replaceChildren();
     treeButtons.forEach((btn) => { btn.disabled = true; });
     try {
       const response = await fetch(`${apiBase()}/api/v1/drive/file/${encodeURIComponent(fileId)}`);
@@ -155,6 +262,7 @@
       if (!response.ok) throw new Error(body?.error?.message || 'ファイルの取得に失敗しました');
       jsonPanelTitle.textContent = body.file_name || 'JSONツリー';
       JsonTree.showResult({ tree: jsonTree, output: jsonOutput, toggleRawButton, data: body.data });
+      renderAnalysisOverview(body.data, body.file_name);
       treeButtons.forEach((btn) => { btn.disabled = false; });
       listStatusMessage.textContent = '';
     } catch (error) {

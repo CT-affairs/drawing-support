@@ -56,10 +56,24 @@ pre.json-output { overflow: auto; flex: 1; min-height: 0; margin: 0; padding: 16
 .json-tree { overflow: auto; flex: 1; min-height: 0; margin: 0; padding: 14px 16px; border-radius: 6px; background: #17202a; color: #e8f1f8; font: 12.5px/1.6 Consolas, "Courier New", monospace; }
 .app-body-split { overflow: hidden; }
 .page-inner-split { max-width: none; height: 100%; display: flex; align-items: stretch; gap: 18px; }
-.dxf-json-controls { width: 380px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
-.json-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; margin-bottom: 0; }
+.drive-json-layout .dxf-json-controls { flex: 1 1 50%; width: auto; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.drive-json-layout .json-panel { flex: 0 1 50%; width: 50%; min-width: 0; display: flex; flex-direction: column; min-height: 0; margin-bottom: 0; }
 .json-panel[hidden] { display: none; }
 .json-panel > .muted { flex-shrink: 0; margin-top: 0; }
+.analysis-overview { margin-bottom: 0; }
+.analysis-overview h2 { margin-bottom: 14px; }
+.analysis-overview-file { margin: 0 0 14px; color: #495057; font-size: .84rem; overflow-wrap: anywhere; }
+.analysis-overview-group { margin-top: 16px; }
+.analysis-overview-group:first-of-type { margin-top: 0; }
+.analysis-overview-group h3 { margin: 0 0 7px; font-size: .9rem; color: #083969; }
+.analysis-overview-list { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; margin: 0; font-size: .84rem; }
+.analysis-overview-list dt { color: #6c757d; overflow-wrap: anywhere; }
+.analysis-overview-list dd { margin: 0; text-align: right; font-weight: 600; white-space: nowrap; }
+.analysis-status-meta { color: #7a5a00; }
+.analysis-status-target { color: #236b3a; }
+.analysis-status-unknown { color: #a15c00; }
+.analysis-status-ok { color: #236b3a; }
+.analysis-overview-note { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid #e9ecef; color: #6c757d; font-size: .8rem; line-height: 1.55; }
 .json-node { margin: 0; }
 .json-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 4px; border-radius: 3px; }
 .json-row[role="button"] { cursor: pointer; }
@@ -94,6 +108,6 @@ pre.json-output { overflow: auto; flex: 1; min-height: 0; margin: 0; padding: 16
   .app-body { padding: 14px; }
   .app-body-split { overflow: visible; }
   .page-inner-split { flex-direction: column; height: auto; }
-  .dxf-json-controls { width: 100%; overflow-y: visible; }
-  .json-panel { min-height: 70vh; }
+  .drive-json-layout .dxf-json-controls { flex: none; width: 100%; overflow-y: visible; }
+  .drive-json-layout .json-panel { flex: none; width: 100%; min-height: 70vh; }
 }

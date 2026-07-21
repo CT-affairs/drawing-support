@@ -44,6 +44,8 @@ class AppTests(unittest.TestCase):
         self.assertIn("共有ドライブJSON閲覧", page.text)
         self.assertIn("/api/v1/drive/list", page.text)
         self.assertIn("/api/v1/drive/file/", page.text)
+        self.assertIn("analysis-overview", page.text)
+        self.assertIn("renderAnalysisOverview", page.text)
         self.assertEqual(script.status_code, 200)
         self.assertIn("JsonTree", script.text)
         page.close()
