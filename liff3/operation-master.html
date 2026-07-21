@@ -32,9 +32,9 @@
           <h2>オペレーションID管理</h2>
           <p class="muted">Tfasの「LLMnote: OP001」などから参照する、基本要望のマスタです。</p>
           <div class="operation-form-grid">
-            <label>オペレーションID<input id="operation-id" placeholder="OP001" pattern="OP[0-9]{3,}"></label>
-            <label>名称<input id="operation-name" placeholder="曲率Rを抽出"></label>
-            <label class="operation-form-wide">指示内容<textarea id="operation-instruction" rows="3" placeholder="曲率Rのある部材を抽出し、半径を一覧化する"></textarea></label>
+            <label>オペレーションID<input id="operation-id" placeholder="OP00X" pattern="OP[0-9]{3,}"></label>
+            <label>名称<input id="operation-name" placeholder="入力例:資材指定"></label>
+            <label class="operation-form-wide">指示内容<textarea id="operation-instruction" rows="3" placeholder="入力例:特定の資材を使用すること"></textarea></label>
             <label>判定方法
               <select id="operation-action">
                 <option value="">選択してください</option>
