@@ -9,7 +9,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py dxf_json.py drive_export.py json_normalization.py ./
+COPY app.py dxf_json.py drive_export.py firestore_operations.py json_normalization.py ./
 COPY liff3 ./liff3
 
 EXPOSE 8080

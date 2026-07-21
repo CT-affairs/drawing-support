@@ -163,4 +163,4 @@ Recommended sample document:
 
 `operation_id`, `name`, `instruction`, `actions`, `active`, and `version` are managed fields. `description` is optional. `updated_at` is written by the backend as a Firestore server timestamp. The `/liff3/operation-master.html` page provides simple list, create/update, and delete operations through `GET /api/v1/operations`, `PUT /api/v1/operations/{operation_id}`, and `DELETE /api/v1/operations/{operation_id}`. IDs must be uppercase `OP` followed by at least three digits, such as `OP001`.
 
-The Cloud Run service account needs Firestore access to the project containing this collection. No source-folder data file is required; application default credentials and the deployed service account are the connection mechanism.
+The Cloud Run service account needs Firestore access to the project containing this collection. No source-folder data file is required; application default credentials and the deployed service account are the connection mechanism. The backend image must include `firestore_operations.py` alongside `app.py`; `Dockerfile` explicitly copies this module.
