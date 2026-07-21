@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from dxf_json import DxfParseError, parse_dxf
-from drive_export import DriveExportError, get_json_file, list_json_files, save_json_to_drive
+from drive_export import DriveExportError, get_json_file, list_json_files, save_json_to_drive, update_json_file
 
 
 app = Flask(__name__)
@@ -17,6 +17,7 @@ API_CORS_ORIGINS = {
     ).split(",")
     if origin.strip()
 }
+UNIT_CODES = {"unitless": 0, "in": 1, "ft": 2, "mm": 4, "cm": 5, "m": 6}
 
 
 @app.after_request
@@ -133,6 +134,42 @@ def get_drive_file_endpoint(file_id):
     )
 
 
+@app.post("/api/v1/drive/file/<file_id>/unit")
+def update_drive_file_unit_endpoint(file_id):
+    payload = request.get_json(silent=True)
+    unit = payload.get("unit") if isinstance(payload, dict) else None
+    if unit not in UNIT_CODES:
+        return jsonify({
+            "error": {
+                "code": "invalid_unit",
+                "message": "unit must be one of unitless, in, ft, mm, cm, m",
+            }
+        }), 400
+
+    try:
+        current = get_json_file(file_id)
+        data = current["data"]
+        previous_unit = data.get("unit", "mm")
+        data["units"] = UNIT_CODES[unit]
+        data["unit"] = unit
+        data["units_source"] = "user_override"
+        data["unit_override"] = {
+            "previous_unit": previous_unit,
+            "unit": unit,
+            "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+        updated = update_json_file(file_id, data)
+    except DriveExportError as exc:
+        return jsonify({"error": {"code": "drive_update_failed", "message": str(exc)}}), 502
+
+    return jsonify({
+        "file_id": updated.get("id", file_id),
+        "file_name": updated.get("name", current["name"]),
+        "web_view_link": updated.get("webViewLink"),
+        "unit": unit,
+    }), 200
+
+
 @app.errorhandler(413)
 def request_entity_too_large(_error):
     return jsonify({"error": {"code": "file_too_large", "message": "DXF file is too large"}}), 413
@@ -145,4 +182,3 @@ def internal_server_error(_error):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")))
-

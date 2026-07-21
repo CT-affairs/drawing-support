@@ -8,11 +8,20 @@ from dxf_json import (
     _encoding_diagnostics,
     _restore_mojibake_name,
     _restore_mojibake_text,
+    _unit_metadata,
     parse_dxf,
 )
 
 
 class DxfJsonTests(unittest.TestCase):
+    def test_missing_dxf_units_default_to_mm_with_source(self):
+        self.assertEqual(_unit_metadata(None), {
+            "code": 4,
+            "name": "mm",
+            "source": "default",
+            "declared_code": None,
+        })
+
     def make_dxf(self):
         document = ezdxf.new("R2013")
         document.header["$INSUNITS"] = 4
@@ -30,8 +39,10 @@ class DxfJsonTests(unittest.TestCase):
     def test_parse_returns_structured_entities(self):
         result = parse_dxf(self.make_dxf())
 
-        self.assertEqual(result["schema_version"], "1.1")
+        self.assertEqual(result["schema_version"], "1.2")
         self.assertEqual(result["units"], 4)
+        self.assertEqual(result["unit"], "mm")
+        self.assertEqual(result["units_source"], "dxf_header")
         self.assertEqual(result["entity_counts"], {"INSERT": 1, "LINE": 1, "TEXT": 1})
         self.assertEqual(result["layers"], ["DUCT", "INSERT", "NOTE", "PAPER"])
         self.assertEqual(result["entities"][0]["start"], [0, 0, 0])

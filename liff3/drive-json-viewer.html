@@ -44,6 +44,9 @@
             <p class="eyebrow">ANALYSIS OVERVIEW</p>
             <h2>JSON概要</h2>
             <div id="analysis-overview-content"></div>
+            <div class="unit-controls" id="unit-controls" hidden>
+              <button class="btn-secondary" id="unit-edit-button" type="button">単位を上書き</button>
+            </div>
           </section>
         </div>
         <section class="card json-panel" id="json-panel">
@@ -63,13 +66,34 @@
     </main>
   </div>
 </div>
+<dialog class="unit-dialog" id="unit-dialog">
+  <form method="dialog" id="unit-form">
+    <h2>JSONの単位を上書き</h2>
+    <p class="muted">座標値は換算せず、JSONの単位情報だけを更新します。</p>
+    <label for="unit-select">単位</label>
+    <select id="unit-select" name="unit">
+      <option value="mm">mm（ミリメートル）</option>
+      <option value="cm">cm（センチメートル）</option>
+      <option value="m">m（メートル）</option>
+      <option value="in">in（インチ）</option>
+      <option value="ft">ft（フィート）</option>
+      <option value="unitless">unitless（単位なし）</option>
+    </select>
+    <div class="action-row unit-dialog-actions">
+      <button class="btn-secondary" id="unit-cancel-button" type="button">キャンセル</button>
+      <button class="btn-primary" id="unit-save-button" type="submit">JSONを更新</button>
+    </div>
+    <div class="status-message" id="unit-status-message" role="status" aria-live="polite"></div>
+  </form>
+</dialog>
 <script>
   // フロントエンドはPlesk、APIはCloud Runのため、相対URLには送信しない。
   // 別プロジェクト・別サービスの場合はこの値をデプロイ先に合わせて変更する。
   window.DRAWING_SUPPORT_API_BASE = window.DRAWING_SUPPORT_API_BASE
+  window.DRAWING_SUPPORT_API_BASE = window.DRAWING_SUPPORT_API_BASE
     || "https://drawing-support-1088643883290.asia-northeast1.run.app";
 </script>
-<script>
+<script type="text/plain" data-legacy-drive-viewer-script>
 (() => {
   const refreshButton = document.getElementById('refresh-button');
   const listStatusMessage = document.getElementById('list-status-message');
@@ -82,7 +106,17 @@
   const toggleRawButton = document.getElementById('toggle-raw-button');
   const analysisOverview = document.getElementById('analysis-overview');
   const analysisOverviewContent = document.getElementById('analysis-overview-content');
+  const unitControls = document.getElementById('unit-controls');
+  const unitEditButton = document.getElementById('unit-edit-button');
+  const unitDialog = document.getElementById('unit-dialog');
+  const unitForm = document.getElementById('unit-form');
+  const unitSelect = document.getElementById('unit-select');
+  const unitCancelButton = document.getElementById('unit-cancel-button');
+  const unitSaveButton = document.getElementById('unit-save-button');
+  const unitStatusMessage = document.getElementById('unit-status-message');
   const treeButtons = [expandAllButton, collapseAllButton, toggleRawButton];
+  let currentFileId = null;
+  let currentData = null;
 
   JsonTree.attachToolbar({ tree: jsonTree, output: jsonOutput, expandAllButton, collapseAllButton, toggleRawButton });
 
@@ -102,8 +136,24 @@
     return Number.isNaN(date.getTime()) ? iso : date.toLocaleString('ja-JP');
   }
 
-  function numberText(value) {
+  const unitNames = { 0: 'unitless', 1: 'in', 2: 'ft', 4: 'mm', 5: 'cm', 6: 'm' };
+
+  function unitDisplay(data) {
+    const unit = data?.unit || unitNames[data?.units] || 'mm';
+    const hasUnit = data?.unit !== undefined || data?.units !== undefined;
+    const source = data?.units_source || (hasUnit ? 'legacy_unknown' : 'default');
+    const sourceLabel = source; /*
+      ? 'JSON記載なし・デフォルト値'
+      : source === 'user_override' ? 'ユーザー上書き' : source === 'dxf_header' ? 'DXF記載値' : '既存JSON（出所不明）';
+    return { unit, source, label: `${unit}（${sourceLabel}）` };
+    */
+    return { unit, source, label: `${unit} (${source})` };
+  }
+
+  function numberText(value) { /*
     return Number.isFinite(Number(value)) ? Number(value).toLocaleString('ja-JP') : '—';
+    */
+    return Number.isFinite(Number(value)) ? Number(value).toLocaleString('ja-JP') : '-';
   }
 
   function appendOverviewGroup(parent, title, rows) {
@@ -191,6 +241,13 @@
       ['解析文字コード', encoding.selected_encoding || '不明'],
     ]);
 
+    const unit = unitDisplay(data);
+    appendOverviewGroup(analysisOverviewContent, '単位', [
+      ['座標単位', unit.label, unit.source === 'default' ? 'unknown' : 'ok'],
+    ]);
+    unitControls.hidden = !currentFileId;
+    unitSelect.value = unit.unit;
+
     const note = document.createElement('p');
     note.className = 'analysis-overview-note';
     note.textContent = classificationAvailable
@@ -249,6 +306,9 @@
   }
 
   async function loadFile(fileId, buttonEl) {
+    currentFileId = null;
+    currentData = null;
+    unitControls.hidden = true;
     Array.from(fileListEl.querySelectorAll('.drive-file-item')).forEach((el) => el.classList.remove('active'));
     if (buttonEl) buttonEl.classList.add('active');
     listStatusMessage.textContent = 'ファイルを読み込み中…';
@@ -262,6 +322,8 @@
       if (!response.ok) throw new Error(body?.error?.message || 'ファイルの取得に失敗しました');
       jsonPanelTitle.textContent = body.file_name || 'JSONツリー';
       JsonTree.showResult({ tree: jsonTree, output: jsonOutput, toggleRawButton, data: body.data });
+      currentFileId = fileId;
+      currentData = body.data;
       renderAnalysisOverview(body.data, body.file_name);
       treeButtons.forEach((btn) => { btn.disabled = false; });
       listStatusMessage.textContent = '';
@@ -272,8 +334,48 @@
   }
 
   refreshButton.addEventListener('click', refreshList);
+  unitEditButton.addEventListener('click', () => {
+    if (!currentFileId || !unitDialog) return;
+    unitSelect.value = unitDisplay(currentData).unit;
+    unitStatusMessage.textContent = '';
+    unitStatusMessage.className = 'status-message';
+    unitDialog.showModal();
+  });
+  unitCancelButton.addEventListener('click', () => unitDialog.close());
+  unitForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!currentFileId) return;
+    unitSaveButton.disabled = true;
+    unitCancelButton.disabled = true;
+    unitStatusMessage.textContent = 'JSONを更新中…';
+    unitStatusMessage.className = 'status-message';
+    try {
+      const response = await fetch(`${apiBase()}/api/v1/drive/file/${encodeURIComponent(currentFileId)}/unit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unit: unitSelect.value }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error?.message || '単位の更新に失敗しました');
+      const codeByUnit = { unitless: 0, in: 1, ft: 2, mm: 4, cm: 5, m: 6 };
+      currentData.units = codeByUnit[body.unit];
+      currentData.unit = body.unit;
+      currentData.units_source = 'user_override';
+      renderAnalysisOverview(currentData, jsonPanelTitle.textContent);
+      unitDialog.close();
+      listStatusMessage.textContent = '単位情報をJSONへ上書きしました';
+      listStatusMessage.className = 'status-message';
+    } catch (error) {
+      unitStatusMessage.textContent = error.message || '単位の更新に失敗しました';
+      unitStatusMessage.className = 'status-message error';
+    } finally {
+      unitSaveButton.disabled = false;
+      unitCancelButton.disabled = false;
+    }
+  });
   refreshList();
 })();
-</script>
+ </script>
+<script src="/liff3/js/drive-json-viewer.js"></script>
 </body>
 </html>

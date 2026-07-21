@@ -14,6 +14,29 @@ class DxfParseError(ValueError):
     """Raised when an uploaded file is not a readable DXF document."""
 
 
+DXF_UNIT_NAMES = {
+    0: "unitless",
+    1: "in",
+    2: "ft",
+    4: "mm",
+    5: "cm",
+    6: "m",
+}
+DEFAULT_UNIT_CODE = 4
+DEFAULT_UNIT_NAME = "mm"
+
+
+def _unit_metadata(raw_code: int | float | None) -> dict[str, Any]:
+    """Return a usable unit while preserving whether DXF declared it."""
+    code = raw_code if raw_code in DXF_UNIT_NAMES else DEFAULT_UNIT_CODE
+    return {
+        "code": code,
+        "name": DXF_UNIT_NAMES[code],
+        "source": "dxf_header" if raw_code in DXF_UNIT_NAMES else "default",
+        "declared_code": raw_code,
+    }
+
+
 _MOJIBAKE_MARKERS = (
     "縺",
     "繧",
@@ -569,6 +592,8 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
 
     diagnostics = _raw_dxf_diagnostics(text, source_size, encoding)
     diagnostics["encoding"] = encoding_diagnostics
+    raw_unit_code = _number(document.header.get("$INSUNITS"))
+    unit_metadata = _unit_metadata(raw_unit_code)
     name_decoding: dict[tuple[str, str, str], dict[str, Any]] = {}
     text_decoding: dict[tuple[str, str, str], dict[str, Any]] = {}
     inspected_name_count = 0
@@ -691,7 +716,7 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
         insert["classification"] = _classification_for_insert(
             insert,
             blocks_by_name.get(insert["block"]),
-            _number(document.header.get("$INSUNITS")),
+            unit_metadata["code"],
         )
     classification_counts = Counter(
         insert["classification"]["role"] for insert in inserts
@@ -752,9 +777,12 @@ def parse_dxf(source: BinaryIO | bytes) -> dict[str, Any]:
     )
 
     result = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "dxf_version": document.dxfversion,
-        "units": _number(document.header.get("$INSUNITS")),
+        "units": unit_metadata["code"],
+        "unit": unit_metadata["name"],
+        "units_source": unit_metadata["source"],
+        "declared_units": unit_metadata["declared_code"],
         "layers": layers,
         "entity_counts": dict(sorted(counts.items())),
         "entities": entities,

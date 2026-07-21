@@ -138,3 +138,6 @@ Cloud Buildを構成するときは、最低限次を確認します。
 - Cloud Buildと本番配置方法
 
 決定後は、実装より先に本章を更新してください。
+### Unit metadata and override
+
+The JSON output uses `unit` as the normalized unit name, `units` as the DXF unit code, and `units_source` as `dxf_header`, `default`, or `user_override`. When the DXF does not declare units, `mm` is used as the default and the source is recorded as `default`. `POST /api/v1/drive/file/{file_id}/unit` updates an existing Drive JSON file in place. This operation changes unit metadata only; it does not rescale coordinates. The Drive JSON viewer exposes this operation from the JSON overview modal.

@@ -39,6 +39,7 @@ class AppTests(unittest.TestCase):
     def test_drive_json_viewer_page_is_available(self):
         page = self.client.get("/liff3/drive-json-viewer.html")
         script = self.client.get("/liff3/js/json-tree.js")
+        viewer_script = self.client.get("/liff3/js/drive-json-viewer.js")
 
         self.assertEqual(page.status_code, 200)
         self.assertIn("共有ドライブJSON閲覧", page.text)
@@ -48,8 +49,12 @@ class AppTests(unittest.TestCase):
         self.assertIn("renderAnalysisOverview", page.text)
         self.assertEqual(script.status_code, 200)
         self.assertIn("JsonTree", script.text)
+        self.assertEqual(viewer_script.status_code, 200)
+        self.assertIn("/api/v1/drive/file/", page.text)
+        self.assertIn("unit-controls", page.text)
         page.close()
         script.close()
+        viewer_script.close()
 
     def test_dxf_endpoint_requires_file(self):
         response = self.client.post("/api/v1/dxf/parse")
@@ -176,6 +181,24 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json["error"]["code"], "drive_fetch_failed")
+
+    def test_drive_unit_update_replaces_metadata_in_existing_file(self):
+        with patch("app.get_json_file") as mock_get, patch("app.update_json_file") as mock_update:
+            mock_get.return_value = {"id": "file-1", "name": "a.json", "data": {"unit": "mm", "units": 4}}
+            mock_update.return_value = {"id": "file-1", "name": "a.json"}
+            response = self.client.post("/api/v1/drive/file/file-1/unit", json={"unit": "cm"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["unit"], "cm")
+        updated_data = mock_update.call_args.args[1]
+        self.assertEqual(updated_data["units"], 5)
+        self.assertEqual(updated_data["unit"], "cm")
+        self.assertEqual(updated_data["units_source"], "user_override")
+
+    def test_drive_unit_update_rejects_unknown_unit(self):
+        response = self.client.post("/api/v1/drive/file/file-1/unit", json={"unit": "yard"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json["error"]["code"], "invalid_unit")
 
 
 if __name__ == "__main__":

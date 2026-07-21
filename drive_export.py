@@ -125,3 +125,39 @@ def get_json_file(file_id: str, folder_id: str | None = None) -> dict[str, Any]:
         raise DriveExportError(f"file content is not valid JSON: {exc}") from exc
 
     return {"id": metadata["id"], "name": metadata["name"], "data": data}
+
+
+def update_json_file(file_id: str, data: dict[str, Any], folder_id: str | None = None) -> dict[str, Any]:
+    """Replace an existing JSON file after verifying it belongs to the shared folder."""
+    target_folder_id = folder_id or os.getenv("GOOGLE_DRIVE_FOLDER_ID", DEFAULT_FOLDER_ID)
+
+    try:
+        service = _drive_service()
+        metadata = (
+            service.files()
+            .get(fileId=file_id, fields="id, name, parents, webViewLink", supportsAllDrives=True)
+            .execute()
+        )
+        if target_folder_id not in (metadata.get("parents") or []):
+            raise DriveExportError("file is not in the configured shared drive folder")
+
+        normalized_data, _unicode_diagnostics = normalize_json_unicode(data)
+        payload = json.dumps(
+            normalized_data,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        ).encode("utf-8", errors="strict")
+        media = MediaIoBaseUpload(io.BytesIO(payload), mimetype="application/json", resumable=False)
+        return (
+            service.files()
+            .update(
+                fileId=file_id,
+                media_body=media,
+                fields="id, name, webViewLink",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+    except (HttpError, GoogleAuthError) as exc:
+        raise DriveExportError(f"failed to update Google Drive JSON: {exc}") from exc
