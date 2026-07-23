@@ -164,3 +164,21 @@ Recommended sample document:
 `operation_id`, `name`, `instruction`, `actions`, `active`, and `version` are managed fields. `updated_at` is written by the backend as a Firestore server timestamp. The current UI selects one `actions` value from `llm` (LLM時に渡す内容), `python` (Pythonで判定するための値), or `visual` (目視での判定項目), and stores it as a one-element array. The data shape remains an array so a future UI can support multiple values. The `/liff3/operation-master.html` page provides simple list, create/update, and delete operations through `GET /api/v1/operations`, `PUT /api/v1/operations/{operation_id}`, and `DELETE /api/v1/operations/{operation_id}`. IDs must be uppercase `OP` followed by at least three digits, such as `OP001`.
 
 The Cloud Run service account needs Firestore access to the project containing this collection. No source-folder data file is required; application default credentials and the deployed service account are the connection mechanism. The backend image must include `firestore_operations.py` alongside `app.py`; `Dockerfile` explicitly copies this module.
+
+## Operation ID purpose in the drawing workflow
+
+The normal path is `Tfas DXF -> drawing-support -> JW-CAD -> ALPHACAM`. Some drawing parts can pass through DXF normalization and reach JW-CAD with little or no manual correction. The operation ID is intended for the exceptional parts that require special handling.
+
+The Tfas operator enters a short operation reference on the relevant drawing part, for example an operation-ID note containing `OP001`. The tool resolves that ID against `drawing_operations` and carries the registered instruction into the analysis JSON. The exact Tfas note prefix is an input-format concern and may be `note:` / `note：` or another agreed convention; the operation master itself is keyed only by the normalized ID. This allows the tool to identify and explicitly report at least the exceptional parts that need attention, instead of asking an LLM or a human to review every object equally.
+
+The implementation target is staged:
+
+1. Detect the operation ID and link it to the affected object or INSERT.
+2. Add the instruction and selected handling category to the JSON.
+3. Extract and display the exceptional objects and the requested handling in a review view.
+4. Where a deterministic Python transformation is available, update the normalized object data and regenerate a JW-CAD-oriented DXF.
+5. Leave judgment-heavy cases as explicit review items rather than silently modifying geometry.
+
+The operation master therefore acts as a lightweight bridge between Tfas work instructions and tool-side analysis. It is not intended to replace the DXF geometry or to make every correction automatic. The baseline goal is to make irregular work visible and traceable; automatic data updates are added only for operations whose result can be validated reliably.
+
+The current API scope is DXF analysis, normalization, JSON storage, and review support. DXF regeneration and deterministic geometry updates are roadmap capabilities, not claims about the current production API. This is consistent with the earlier API contract that excludes DXF re-output and AI candidate judgment from the current endpoint responsibilities; the operation-ID workflow defines how those future capabilities will be selected and traced when implemented.

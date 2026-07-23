@@ -46,6 +46,8 @@ JW-CADで確認
 6. **JW-CAD確認**：表示・編集・現場利用に問題がないか確認する
 7. **フィードバック**：採用候補・修正内容・手戻りを次回検証へ反映する
 
+JW-CAD確認の後は、ALPHACAMによるCAM、NCルーター加工、現場加工へ続く。製造下流の全体像と、本プロジェクトがどこまでを担うかは§14を参照する。
+
 ## 3. 関係するツール・サービス
 
 | ツール／サービス | 現状・役割 | 検討事項 |
@@ -53,6 +55,7 @@ JW-CADで確認
 | Tfas | 開発用アカウント作成済み。3D情報の起点 | データ取得方法、出力形式、属性情報、検証サンプル |
 | ezdxf | DXFの解析・編集・再出力を担当する第一候補 | Tfas出力DXFとの互換性、対象エンティティ、文字・寸法・ブロックの保持 |
 | JW-CAD | 無料で利用可能。現場作業用の確認・編集環境 | DXFの表示崩れ、尺度、線種、文字、編集性 |
+| ALPHACAM／NC | JW-CAD後のCAM・材料加工。本ツールの実装範囲外 | JW-CAD投入品質が下流へ与える影響の把握 |
 | Cloud Run | ERP社内主幹システムの一部が稼働開始中 | 製図・AI支援用の専用プロジェクトを分離するか検討 |
 | AI API | 候補生成・比較・チェック・修正案を担当 | 構造化出力、データ取り扱い、ログ、コスト、精度 |
 | Rebro／BIM | 将来の受注条件になる可能性 | IFC入出力、属性保持、ツール差異を吸収する設計 |
@@ -260,13 +263,46 @@ Tfas → IFC → BIM／Rebro → 構造化データ → AI → DXF → JW-CAD
 まずは、Tfas→DXF→JW-CADの既存フローに`ezdxf`を追加し、DXFを正しく読み取り、構造化し、簡単な候補図面を再出力できるかを確認する。
 
 AIは、図面を直接生成する唯一の判断者ではなく、複数候補の生成・比較・ルールチェック・修正案の提示を担当する。最終的な図面生成と寸法計算は、検証可能なプログラム処理として実装する。
-## Manufacturing downstream flow (current)
 
-The practical downstream process is:
+当面の効果測定の主眼は、JW-CAD向け準備作業の削減である。解析JSONは中間表現であり、JW-CADやALPHACAMが直接消費する成果物ではない。確認済みのJSONから整えたDXFを再生成し、JW-CADへ渡す工程を次の出力目標とする。
+
+## 14. 製造下流フロー（現状）
+
+実務上の下流工程は次のとおりである。本プロジェクトはその前半、特にJW-CAD投入前の図面整備を対象とする。
 
 ```text
-Tfas DXF -> drawing-support analysis/normalization -> JW-CAD 2D drawing
-          -> ALPHACAM CAM -> NC router material processing -> field processing
+Tfas DXF
+  ↓
+drawing-support（解析・正規化）
+  ↓
+JW-CAD（2D図面の確認・編集）
+  ↓
+ALPHACAM（CAM）
+  ↓
+NCルーター（材料加工）
+  ↓
+現場加工
 ```
 
-The current project focuses first on reducing the JW-CAD preparation work. The analysis JSON is an intermediate representation; JW-CAD does not consume the JSON directly. The future output step is to regenerate a cleaned DXF from the reviewed JSON, then pass that DXF to JW-CAD and onward to ALPHACAM. NCVC is not part of this process.
+### 役割の切り分け
+
+| 成果物／工程 | 役割 | 備考 |
+|---|---|---|
+| Tfas DXF | 入力。Tfas側でDXFへ変換したファイルを受ける | TFS固有形式の直接解析は対象外 |
+| 解析JSON | 中間表現。図形・レイヤー・診断情報・レビュー用情報を保持 | JW-CADはJSONを直接読まない |
+| 正規化・再出力DXF | JW-CAD向けの整備済みDXF（将来の出力目標） | 現PoCのAPI責務には未含み |
+| JW-CAD | 2D確認・編集。ALPHACAM投入前の実務確認点 | 手修正を減らすことが短期目標 |
+| ALPHACAM → NC → 現場 | CAM・加工・施工 | 本ツールの実装範囲外。下流互換の前提として把握する |
+
+### 位置づけ
+
+- 通常経路は `Tfas DXF → drawing-support → JW-CAD → ALPHACAM` である
+- 一部の図面要素は、正規化後にほぼ手修正なしでJW-CADへ渡せる可能性がある
+- 特殊対応が必要な要素は、作業指示（例: オペレーションID）で明示し、JSON上で追跡できるようにする方針とする
+- NCVCは本フローに含めない
+
+### 実装段階との対応
+
+現時点のAPIは、DXF解析・正規化情報のJSON化・保存・レビュー支援までを対象とする。DXF再出力と確定的な幾何更新はロードマップ上の能力であり、現在の本番APIが実装済みであると主張しない。
+
+将来の再出力が使えるようになったあとも、判断が重いケースは自動変更せず、レビュー項目として明示する。
